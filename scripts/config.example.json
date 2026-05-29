@@ -1,0 +1,12 @@
+{
+  "predictId": "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a",
+  "oracleId": "replace-with-active-oracle-from-/oracles",
+  "dbp": "0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138",
+  "managerId": "replace-after-running-pnpm-setup",
+  "dusdcType": "replace-with-dUSDC-coin-type",
+  "dusdcCoinId": "replace-with-dUSDC-coin-object-id",
+  "sender": "replace-with-wallet-address",
+  "expiry": 0,
+  "minStrike": 50000000000000,
+  "tickSize": 1000000000
+}

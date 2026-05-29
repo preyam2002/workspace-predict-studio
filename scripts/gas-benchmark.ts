@@ -1,0 +1,54 @@
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import { Transaction } from '@mysten/sui/transactions';
+import { readFileSync } from 'node:fs';
+
+const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
+  dbp: string;
+  predictId: string;
+  managerId: string;
+  oracleId: string;
+  dusdcType: string;
+  sender: string;
+  expiry: number;
+  minStrike: number;
+  tickSize: number;
+};
+
+for (const key of ['dbp', 'predictId', 'managerId', 'oracleId', 'dusdcType', 'sender', 'expiry', 'minStrike', 'tickSize'] as const) {
+  if (!cfg[key]) throw new Error(`scripts/config.json is missing ${key}`);
+}
+
+const client = new SuiJsonRpcClient({ url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });
+const sizes = [1, 3, 5, 8, 10, 12, 15, 20];
+let maxSafe = 0;
+
+for (const n of sizes) {
+  const tx = new Transaction();
+  for (let i = 0; i < n; i += 1) {
+    const strike = cfg.minStrike + (i + 1) * cfg.tickSize * 10;
+    const key = tx.moveCall({
+      target: `${cfg.dbp}::market_key::up`,
+      arguments: [tx.pure.id(cfg.oracleId), tx.pure.u64(cfg.expiry), tx.pure.u64(strike)],
+    });
+    tx.moveCall({
+      target: `${cfg.dbp}::predict::mint`,
+      typeArguments: [cfg.dusdcType],
+      arguments: [
+        tx.object(cfg.predictId),
+        tx.object(cfg.managerId),
+        tx.object(cfg.oracleId),
+        key,
+        tx.pure.u64(1_000_000),
+        tx.object('0x6'),
+      ],
+    });
+  }
+
+  const result = await client.devInspectTransactionBlock({ sender: cfg.sender, transactionBlock: tx });
+  const computation = Number(result.effects?.gasUsed?.computationCost ?? 0);
+  const status = result.effects?.status.status ?? 'unknown';
+  if (status === 'success' && computation < 5_000_000) maxSafe = n;
+  console.log(`${n}\t${computation}\t${status}${result.effects?.status.error ? `\t${result.effects.status.error}` : ''}`);
+}
+
+console.log(`MAX_LEGS_PER_PTB=${maxSafe || 8}`);

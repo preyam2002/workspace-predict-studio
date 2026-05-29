@@ -9,6 +9,19 @@
 /// the per-PTB leg budget against the 5M computation-unit cap).
 module predict_studio::studio {
     use std::string::String;
+    use sui::{
+        clock::Clock,
+        event,
+        object::{Self, UID},
+        transfer,
+        tx_context::{Self, TxContext},
+    };
+
+    const EMaxLossExceeded: u64 = 1;
+    const ETooManyLegs: u64 = 2;
+    const ENotOwner: u64 = 3;
+    const EAlreadySettled: u64 = 4;
+    const EOracleNotSettled: u64 = 5;
 
     /// One leg of a structured payoff: a Predict binary or range position.
     /// `is_range` selects binary vs vertical range; strikes/direction are recorded
@@ -69,5 +82,214 @@ module predict_studio::studio {
         is_range: bool, is_up: bool, lower_strike: u64, higher_strike: u64, quantity: u64,
     ): Leg {
         Leg { is_range, is_up, lower_strike, higher_strike, quantity }
+    }
+
+    /// Atomically mint every leg of a structure, enforce the worst-case-loss
+    /// budget, and return one owned StructuredPosition.
+    public fun build_and_mint<Quote>(
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        shape: String,
+        legs: vector<Leg>,
+        max_loss_budget: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): StructuredPosition {
+        use deepbook_predict::market_key;
+        use deepbook_predict::predict;
+        use deepbook_predict::range_key;
+
+        assert!(tx_context::sender(ctx) == manager.owner(), ENotOwner);
+        assert!(!legs.is_empty() && legs.length() <= 24, ETooManyLegs);
+
+        let oracle_id = oracle.id();
+        let expiry = oracle.expiry();
+        let balance_before = manager.balance<Quote>();
+
+        let mut i = 0;
+        while (i < legs.length()) {
+            let leg = &legs[i];
+            if (leg.is_range) {
+                let key = range_key::new(oracle_id, expiry, leg.lower_strike, leg.higher_strike);
+                predict::mint_range<Quote>(predict, manager, oracle, key, leg.quantity, clock, ctx);
+            } else {
+                let key = market_key::new(oracle_id, expiry, leg.lower_strike, leg.is_up);
+                predict::mint<Quote>(predict, manager, oracle, key, leg.quantity, clock, ctx);
+            };
+            i = i + 1;
+        };
+
+        let balance_after = manager.balance<Quote>();
+        let premium_paid = balance_before - balance_after;
+        assert!(premium_paid <= max_loss_budget, EMaxLossExceeded);
+
+        let max_gain = max_payout(&legs);
+        let pos = StructuredPosition {
+            id: object::new(ctx),
+            owner: tx_context::sender(ctx),
+            manager_id: object::id(manager),
+            oracle_id,
+            expiry_ms: expiry,
+            shape,
+            legs,
+            premium_paid,
+            max_loss: premium_paid,
+            max_gain,
+            settled: false,
+        };
+
+        event::emit(StructureMinted {
+            position_id: object::id(&pos),
+            owner: pos.owner,
+            shape: pos.shape,
+            leg_count: pos.legs.length(),
+            premium_paid,
+            max_loss: premium_paid,
+            max_gain,
+        });
+
+        pos
+    }
+
+    #[allow(lint(self_transfer))]
+    public fun build_and_mint_to_sender<Quote>(
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        shape: String,
+        legs: vector<Leg>,
+        max_loss_budget: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        let pos = build_and_mint<Quote>(
+            predict,
+            manager,
+            oracle,
+            shape,
+            legs,
+            max_loss_budget,
+            clock,
+            ctx,
+        );
+        transfer::public_transfer(pos, tx_context::sender(ctx));
+    }
+
+    public fun settle<Quote>(
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        pos: &mut StructuredPosition,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        use deepbook_predict::market_key;
+        use deepbook_predict::predict;
+        use deepbook_predict::range_key;
+
+        assert!(tx_context::sender(ctx) == pos.owner, ENotOwner);
+        assert!(tx_context::sender(ctx) == manager.owner(), ENotOwner);
+        assert!(!pos.settled, EAlreadySettled);
+        assert!(oracle.is_settled(), EOracleNotSettled);
+
+        let before = manager.balance<Quote>();
+        let mut i = 0;
+        while (i < pos.legs.length()) {
+            let leg = &pos.legs[i];
+            if (leg.is_range) {
+                let key = range_key::new(pos.oracle_id, pos.expiry_ms, leg.lower_strike, leg.higher_strike);
+                predict::redeem_range<Quote>(predict, manager, oracle, key, leg.quantity, clock, ctx);
+            } else {
+                let key = market_key::new(pos.oracle_id, pos.expiry_ms, leg.lower_strike, leg.is_up);
+                predict::redeem_permissionless<Quote>(
+                    predict,
+                    manager,
+                    oracle,
+                    key,
+                    leg.quantity,
+                    clock,
+                    ctx,
+                );
+            };
+            i = i + 1;
+        };
+
+        let payout = manager.balance<Quote>() - before;
+        pos.settled = true;
+        let (pnl_is_gain, pnl_abs) = if (payout >= pos.premium_paid) {
+            (true, payout - pos.premium_paid)
+        } else {
+            (false, pos.premium_paid - payout)
+        };
+
+        event::emit(StructureSettled {
+            position_id: object::id(pos),
+            owner: pos.owner,
+            payout,
+            pnl_is_gain,
+            pnl_abs,
+        });
+    }
+
+    public fun settle_to_receipt<Quote>(
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        pos: &mut StructuredPosition,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        settle<Quote>(predict, manager, oracle, pos, clock, ctx);
+    }
+
+    public fun max_payout(legs: &vector<Leg>): u64 {
+        let mut best = 0;
+        let mut i = 0;
+        while (i < legs.length()) {
+            let leg = &legs[i];
+            best = max_u64(best, payout_at(legs, leg.lower_strike));
+            if (leg.lower_strike > 0) {
+                best = max_u64(best, payout_at(legs, leg.lower_strike - 1));
+            };
+            best = max_u64(best, payout_at(legs, leg.lower_strike + 1));
+
+            if (leg.is_range) {
+                best = max_u64(best, payout_at(legs, leg.higher_strike));
+                if (leg.higher_strike > 0) {
+                    best = max_u64(best, payout_at(legs, leg.higher_strike - 1));
+                };
+                best = max_u64(best, payout_at(legs, leg.higher_strike + 1));
+            };
+            i = i + 1;
+        };
+        best
+    }
+
+    fun payout_at(legs: &vector<Leg>, settlement: u64): u64 {
+        let mut payout = 0;
+        let mut i = 0;
+        while (i < legs.length()) {
+            let leg = &legs[i];
+            if (leg_pays(leg, settlement)) {
+                payout = payout + leg.quantity;
+            };
+            i = i + 1;
+        };
+        payout
+    }
+
+    fun leg_pays(leg: &Leg, settlement: u64): bool {
+        if (leg.is_range) {
+            settlement > leg.lower_strike && settlement <= leg.higher_strike
+        } else if (leg.is_up) {
+            settlement > leg.lower_strike
+        } else {
+            settlement < leg.lower_strike
+        }
+    }
+
+    fun max_u64(a: u64, b: u64): u64 {
+        if (a > b) a else b
     }
 }
