@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+build/
+move/build/
+.env
+.env.local
+.DS_Store
+*.log
+.sui/
+deploy.json
