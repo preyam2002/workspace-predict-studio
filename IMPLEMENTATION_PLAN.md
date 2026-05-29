@@ -1,6 +1,8 @@
 # Predict Studio — Implementation Plan
 
 > **For agentic workers (Codex or Claude):** This plan is fully self-contained. All Sui/DeepBook-Predict ground truth, the real on-chain API, scaling conventions, the decomposition math, and the gas budget are baked in below — you should not need to re-research anything. Implement task-by-task; steps use checkbox (`- [ ]`) syntax. Run the verification command after each task before moving on. Commit after each task (conventional commits).
+>
+> **Paste-ready code:** `docs/REFERENCE_IMPLEMENTATION.md` contains the complete contents of every TS module (`lib/*`), the scripts, and the UI components — this plan gives the tasks/tests/order; the reference gives the code. Start at its **VERIFY-FIRST** section (4 integration points to confirm against source on Day 1).
 
 **Goal:** Ship a polished, working-on-testnet **defined-risk options-strategy builder for DeepBook Predict** — pick a payoff shape, the engine synthesizes it from Predict binary/range legs (choosing the *cheapest* decomposition off the live SVI vol surface), previews the payoff curve + EV + max-loss/max-gain, mints it atomically as one `StructuredPosition` with a chain-enforced loss envelope, and settles it at expiry.
 
