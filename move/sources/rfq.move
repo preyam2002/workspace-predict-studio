@@ -3,10 +3,12 @@ module predict_studio::rfq {
     use predict_studio::studio;
     use std::bcs;
     use sui::{
+        address,
         clock::{Self, Clock},
         ed25519,
         hash,
         object::{Self, UID},
+        table::{Self, Table},
         tx_context::TxContext,
     };
 
@@ -14,10 +16,13 @@ module predict_studio::rfq {
     const EExpired: u64 = 2;
     const ENonceUsed: u64 = 3;
     const EStructureHashMismatch: u64 = 4;
+    const EBadMaker: u64 = 5;
+
+    const ED25519_SCHEME_FLAG: u8 = 0;
 
     public struct RfqBook has key, store {
         id: UID,
-        used_quotes: vector<vector<u8>>,
+        used_quotes: Table<vector<u8>, bool>,
     }
 
     public struct Quote has copy, drop, store {
@@ -29,7 +34,7 @@ module predict_studio::rfq {
     }
 
     public fun new(ctx: &mut TxContext): RfqBook {
-        RfqBook { id: object::new(ctx), used_quotes: vector[] }
+        RfqBook { id: object::new(ctx), used_quotes: table::new(ctx) }
     }
 
     public fun new_quote(
@@ -50,14 +55,15 @@ module predict_studio::rfq {
         hash::blake2b256(&quote_message(quote))
     }
 
+    public fun ed25519_address(public_key: vector<u8>): address {
+        let mut bytes = vector[ED25519_SCHEME_FLAG];
+        bytes.append(public_key);
+        address::from_bytes(hash::blake2b256(&bytes))
+    }
+
     public fun used(book: &RfqBook, quote: &Quote): bool {
         let key = quote_key(quote);
-        let mut i = 0;
-        while (i < book.used_quotes.length()) {
-            if (book.used_quotes[i] == key) return true;
-            i = i + 1;
-        };
-        false
+        table::contains(&book.used_quotes, key)
     }
 
     public fun verify_and_mark(
@@ -70,8 +76,10 @@ module predict_studio::rfq {
         assert!(clock::timestamp_ms(clock) <= quote.expiry_ms, EExpired);
         let msg = quote_message(&quote);
         assert!(ed25519::ed25519_verify(&signature, &public_key, &msg), EBadSig);
-        assert!(!used(book, &quote), ENonceUsed);
-        book.used_quotes.push_back(hash::blake2b256(&msg));
+        assert!(ed25519_address(public_key) == quote.maker, EBadMaker);
+        let key = hash::blake2b256(&msg);
+        assert!(!table::contains(&book.used_quotes, key), ENonceUsed);
+        table::add(&mut book.used_quotes, key, true);
         quote.premium
     }
 
@@ -116,7 +124,8 @@ module predict_studio::rfq {
 
     #[test_only]
     public fun destroy_for_testing(book: RfqBook) {
-        let RfqBook { id, used_quotes: _ } = book;
+        let RfqBook { id, used_quotes } = book;
+        table::drop(used_quotes);
         object::delete(id);
     }
 }

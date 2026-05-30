@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { breakevens, ev, greeksUp, impliedProb, maxGain, maxLoss, payoffCurve, pnlAt, priceRange, priceUp } from './payoff';
+import {
+  breakevens,
+  clearPricingCaches,
+  ev,
+  greeksUp,
+  impliedProb,
+  maxGain,
+  maxLoss,
+  payoffCurve,
+  pnlAt,
+  priceRange,
+  priceUp,
+  pricingCacheSizes,
+} from './payoff';
 import type { Leg, SVI } from './types';
 
 const svi: SVI = { a: 0.000000283, b: 0.000008064, rho: -0.94, m: -0.000943815, sigma: 0.001 };
@@ -25,5 +38,13 @@ describe('payoff analytics', () => {
     expect(priceRange(svi, 70_000, 68_000, 72_000)).toBeGreaterThan(0);
     expect(ev(legs, svi, 70_000, 400_000)).toBeGreaterThan(-400_000);
     expect(Object.values(greeksUp(svi, 70_000, 70_000, 1 / 365)).every(Number.isFinite)).toBe(true);
+  });
+
+  it('memoizes arb-guard checks per SVI surface', () => {
+    clearPricingCaches();
+    priceUp(svi, 70_000, 70_000);
+    priceRange(svi, 70_000, 68_000, 72_000);
+    priceUp({ ...svi }, 71_000, 70_000);
+    expect(pricingCacheSizes().guard).toBe(1);
   });
 });

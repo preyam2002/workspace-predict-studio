@@ -285,13 +285,57 @@ export function solveExact(target: SparseTarget, opts: ExactSolveOpts): SparseSo
 }
 
 export function solveBranchAndBound(target: SparseTarget, opts: ExactSolveOpts & { maxNodes?: number }): SparseSolution {
-  const greedy = solveSparse(target, opts);
-  try {
-    const exact = solveExact(target, { ...opts, maxSupports: opts.maxNodes ?? opts.maxSupports ?? 500_000 });
-    return betterSolution(exact, greedy) ? exact : greedy;
-  } catch {
-    return greedy;
-  }
+  if (target.g.some((v) => v < -1e-9)) throw new Error('target must be non-negative (long-only constraint)');
+  const w = weightsFor(target.gridStrikes.length, opts.weights);
+  const dict = pruneByCoherence(buildDictionary(target.gridStrikes, opts.maxMacroWidth), opts.coherencePrune ?? 0.999999);
+  const target64 = Float64Array.from(target.g);
+  const maxNodes = opts.maxNodes ?? opts.maxSupports ?? 100_000;
+  let nodes = 0;
+  let best = solveSparse(target, opts);
+  const support: number[] = [];
+
+  const lowerBound = (start: number): number => {
+    const relaxed = support.concat(Array.from({ length: dict.length - start }, (_, i) => start + i));
+    if (relaxed.length === 0) return weightedRms(target64, w);
+    const x = nnls(
+      relaxed.map((j) => dict[j].payoff),
+      target64,
+      w,
+      120,
+    );
+    const residual = Float64Array.from(target.g);
+    relaxed.forEach((j, r) => {
+      for (let t = 0; t < residual.length; t += 1) residual[t] -= x[r] * dict[j].payoff[t];
+    });
+    return weightedRms(residual, w);
+  };
+
+  const evaluate = () => {
+    if (support.length === 0) return;
+    const x = nnls(
+      support.map((j) => dict[j].payoff),
+      target64,
+      w,
+    );
+    const candidate = solutionFromSupport(target, dict, support, x, w);
+    if (betterSolution(candidate, best)) best = candidate;
+  };
+
+  const visit = (start: number) => {
+    nodes += 1;
+    if (nodes > maxNodes) return;
+    evaluate();
+    if (support.length >= opts.maxLegs || start >= dict.length) return;
+    if (lowerBound(start) >= best.l2Error - 1e-12) return;
+
+    support.push(start);
+    visit(start + 1);
+    support.pop();
+    visit(start + 1);
+  };
+
+  visit(0);
+  return best;
 }
 
 export function mutualCoherence(strikes: number[], maxMacroWidth?: number): number {

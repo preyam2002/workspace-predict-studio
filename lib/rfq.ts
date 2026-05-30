@@ -66,6 +66,11 @@ export function quoteDigestHex(quote: RfqQuote): string {
   return bytesToHex(blake2b(canonicalQuoteBytes(quote), { dkLen: 32 }));
 }
 
+export function makerAddressFromEd25519PublicKey(publicKey: Uint8Array | number[]): string {
+  const key = Array.from(publicKey);
+  return `0x${bytesToHex(blake2b(Uint8Array.from([0, ...key]), { dkLen: 32 }))}`;
+}
+
 export function routeForOrder(totalPremium: number, rfqThreshold: number): RfqRoute {
   if (totalPremium >= rfqThreshold) return { route: 'rfq', reason: 'above-threshold' };
   return { route: 'book', reason: 'below-threshold' };
