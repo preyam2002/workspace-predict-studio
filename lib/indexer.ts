@@ -44,8 +44,13 @@ export async function getPrices(oracleId: string) {
 
 export async function getSettledHistory(asset = 'BTC') {
   const oracles = await getOracles();
+  return settledHistoryFromOracles(oracles, asset);
+}
+
+export function settledHistoryFromOracles(oracles: IndexerOracle[], asset = 'BTC') {
   return oracles
-    .filter((oracle) => oracle.underlying_asset === asset && oracle.status === 'settled' && oracle.settlement_price)
+    .filter((oracle) => oracle.underlying_asset === asset && oracle.status === 'settled' && oracle.settlement_price !== undefined)
+    .sort((a, b) => Number(b.expiry) - Number(a.expiry))
     .map((oracle) => ({ settlementPrice: Number(oracle.settlement_price), expiryMs: Number(oracle.expiry) }));
 }
 

@@ -2,16 +2,16 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3 } from 'lucide-react';
-import { backtest } from '@/lib/backtest';
+import { backtestWithFallback } from '@/lib/backtest';
 import { getSettledHistory } from '@/lib/indexer';
-import { USDC, type Leg } from '@/lib/types';
+import { USDC, type Leg, type OracleState } from '@/lib/types';
 
-export function Backtester({ legs, premium }: { legs: Leg[]; premium: number }) {
+export function Backtester({ legs, premium, oracle }: { legs: Leg[]; premium: number; oracle?: OracleState }) {
   const history = useQuery({
     queryKey: ['settled-history'],
     queryFn: () => getSettledHistory('BTC'),
   });
-  const result = history.data ? backtest(legs, premium, history.data.slice(0, 60)) : undefined;
+  const result = oracle ? backtestWithFallback(legs, premium, (history.data ?? []).slice(0, 60), oracle) : undefined;
   const bars = result?.pnls.slice(0, 24) ?? [];
   const maxAbs = Math.max(1, ...bars.map((value) => Math.abs(value)));
 
@@ -30,6 +30,9 @@ export function Backtester({ legs, premium }: { legs: Leg[]; premium: number }) 
             <Metric label="Runs" value={String(result.runs)} />
             <Metric label="Hit Rate" value={`${Math.round(result.hitRate * 100)}%`} />
             <Metric label="Avg P&L" value={`$${(result.avgPnl / USDC).toFixed(2)}`} />
+          </div>
+          <div className="metric-label mt-3">
+            {result.source === 'history' ? 'Settled oracle history' : 'SVI synthetic fallback'}
           </div>
           <div className="mt-4 flex h-24 items-end gap-1">
             {bars.map((value, index) => (

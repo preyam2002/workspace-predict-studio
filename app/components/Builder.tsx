@@ -223,7 +223,7 @@ export function Builder() {
           <div className="grid content-start gap-4">
             <StructureSummary quote={quote} quoteSource={quoteSource} />
             {sparseTarget ? <SolverInspector oracle={oracle} target={sparseTarget} /> : null}
-            <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} />
+            <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} oracle={oracle} />
             <TranchePanel />
             <CreatorLeaderboard ranks={publisherQuery.data ?? []} />
             {quote ? <PortfolioPanel oracle={oracle} positions={[{ legs: quote.legs, premium: quote.totalCost }]} /> : null}

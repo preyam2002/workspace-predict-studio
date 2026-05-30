@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPublisherLeaderboard, publisherLeaderboardFromEvents } from './indexer';
+import { getPublisherLeaderboard, publisherLeaderboardFromEvents, settledHistoryFromOracles } from './indexer';
 
 describe('publisher leaderboard indexing', () => {
   it('aggregates publisher fee events by implied premium volume', () => {
@@ -27,5 +27,47 @@ describe('publisher leaderboard indexing', () => {
     );
 
     expect(ranks).toEqual([{ publisher: '0xalice', volume: 100_000, realizedPayout: 0, fills: 1 }]);
+  });
+});
+
+describe('settled history indexing', () => {
+  it('keeps zero settlement prices and sorts newest first', () => {
+    expect(
+      settledHistoryFromOracles([
+        {
+          predict_id: '0x1',
+          oracle_id: '0x2',
+          underlying_asset: 'BTC',
+          expiry: 10,
+          min_strike: 0,
+          tick_size: 1,
+          status: 'settled',
+          settlement_price: 0,
+        },
+        {
+          predict_id: '0x1',
+          oracle_id: '0x3',
+          underlying_asset: 'ETH',
+          expiry: 20,
+          min_strike: 0,
+          tick_size: 1,
+          status: 'settled',
+          settlement_price: 2,
+        },
+        {
+          predict_id: '0x1',
+          oracle_id: '0x4',
+          underlying_asset: 'BTC',
+          expiry: 30,
+          min_strike: 0,
+          tick_size: 1,
+          status: 'settled',
+          settlement_price: 3,
+        },
+      ]),
+    ).toEqual([
+      { settlementPrice: 3, expiryMs: 30 },
+      { settlementPrice: 0, expiryMs: 10 },
+    ]);
   });
 });
