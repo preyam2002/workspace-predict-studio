@@ -68,6 +68,17 @@ export class VaultClient {
     return tx;
   }
 
+  buildCreateManagerEscrowTx(ids: VaultIds, managerId: string): Transaction {
+    const tx = new Transaction();
+    const escrow = tx.moveCall({
+      target: `${this.pkg}::vault::create_manager_escrow`,
+      typeArguments: [ids.quoteType],
+      arguments: [tx.object(ids.vaultId), tx.object(managerId)],
+    });
+    tx.transferObjects([escrow], tx.pure.address(ids.recipient));
+    return tx;
+  }
+
   async readNav(vaultId: string, quoteType: string, sender: string): Promise<number> {
     const tx = new Transaction();
     tx.moveCall({

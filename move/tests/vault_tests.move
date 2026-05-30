@@ -1,7 +1,9 @@
 #[test_only]
 module predict_studio::vault_tests {
     use predict_studio::vault;
-    use sui::{coin, tx_context};
+    use deepbook_predict::{predict, predict_manager::PredictManager};
+    use sui::test_scenario::{Self as test_scenario};
+    use sui::{coin, object, tx_context};
 
     #[test]
     fun first_deposit_mints_shares_and_sets_accounted_balance() {
@@ -181,5 +183,54 @@ module predict_studio::vault_tests {
         vault::destroy_keeper_for_testing(cap);
         vault::destroy_for_testing(v1);
         vault::destroy_for_testing(v2);
+    }
+
+    #[test]
+    fun manager_escrow_binds_signer_owned_predict_manager() {
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(admin);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let v = vault::new_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+
+            assert!(vault::escrow_vault_id(&escrow) == object::id(&v), 0);
+            assert!(vault::escrow_manager_id(&escrow) == manager_id, 1);
+            assert!(vault::escrow_owner(&escrow) == admin, 2);
+
+            vault::assert_escrowed_manager(&v, &escrow, &manager, scenario.ctx());
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = 12)]
+    fun manager_escrow_rejects_manager_owned_by_different_sender() {
+        let admin = @0xA;
+        let operator = @0xB;
+        let mut scenario = test_scenario::begin(operator);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let v = vault::new_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
     }
 }
