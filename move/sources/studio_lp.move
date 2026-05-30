@@ -32,10 +32,6 @@ module predict_studio::studio_lp {
         );
     }
 
-    public fun id(factory: &ShareFactory): ID {
-        object::id(factory)
-    }
-
     public(package) fun into_treasury(factory: ShareFactory): TreasuryCap<STUDIO_LP> {
         let ShareFactory { id, share_treasury } = factory;
         object::delete(id);
