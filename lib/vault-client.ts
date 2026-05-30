@@ -8,6 +8,25 @@ export interface VaultIds {
   recipient: string;
 }
 
+export interface CreateVaultParams {
+  factoryId: string;
+  quoteType: string;
+  managerOwner: string;
+  minDeposit: number;
+  performanceFeeBps: number;
+  strategy: string;
+}
+
+export interface CreateVaultWithManagerEscrowParams {
+  factoryId: string;
+  quoteType: string;
+  managerId: string;
+  recipient: string;
+  minDeposit: number;
+  performanceFeeBps: number;
+  strategy: string;
+}
+
 export class VaultClient {
   constructor(
     private readonly client: SuiJsonRpcClient,
@@ -76,6 +95,39 @@ export class VaultClient {
       arguments: [tx.object(ids.vaultId), tx.object(managerId)],
     });
     tx.transferObjects([escrow], tx.pure.address(ids.recipient));
+    return tx;
+  }
+
+  buildCreateAndShareVaultTx(params: CreateVaultParams): Transaction {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${this.pkg}::vault::create_and_share_vault`,
+      typeArguments: [params.quoteType],
+      arguments: [
+        tx.object(params.factoryId),
+        tx.pure.address(params.managerOwner),
+        tx.pure.u64(params.minDeposit),
+        tx.pure.u64(params.performanceFeeBps),
+        tx.pure.string(params.strategy),
+      ],
+    });
+    return tx;
+  }
+
+  buildCreateVaultWithManagerEscrowTx(params: CreateVaultWithManagerEscrowParams): Transaction {
+    const tx = new Transaction();
+    const escrow = tx.moveCall({
+      target: `${this.pkg}::vault::create_and_share_vault_with_manager_escrow`,
+      typeArguments: [params.quoteType],
+      arguments: [
+        tx.object(params.factoryId),
+        tx.object(params.managerId),
+        tx.pure.u64(params.minDeposit),
+        tx.pure.u64(params.performanceFeeBps),
+        tx.pure.string(params.strategy),
+      ],
+    });
+    tx.transferObjects([escrow], tx.pure.address(params.recipient));
     return tx;
   }
 

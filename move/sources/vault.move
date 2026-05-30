@@ -197,6 +197,28 @@ module predict_studio::vault {
         vault_id
     }
 
+    #[allow(lint(share_owned))]
+    public fun create_and_share_vault_with_manager_escrow<Q>(
+        factory: ShareFactory,
+        manager: &deepbook_predict::predict_manager::PredictManager,
+        min_deposit: u64,
+        performance_fee_bps: u64,
+        strategy: String,
+        ctx: &mut TxContext,
+    ): ManagerEscrow {
+        let v = create_vault<Q>(
+            factory,
+            manager.owner(),
+            min_deposit,
+            performance_fee_bps,
+            strategy,
+            ctx,
+        );
+        let escrow = create_manager_escrow(&v, manager, ctx);
+        transfer::public_share_object(v);
+        escrow
+    }
+
     public fun deposit<Q>(v: &mut StructuredVault<Q>, c: Coin<Q>, ctx: &mut TxContext): Coin<STUDIO_LP> {
         let amt = coin::value(&c);
         assert!(amt >= v.min_deposit, EBelowMinDeposit);

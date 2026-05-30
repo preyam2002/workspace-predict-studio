@@ -2,6 +2,8 @@ import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { parseVaultSetupResult } from '../lib/deploy-utils';
+import { VaultClient } from '../lib/vault-client';
 
 if (!existsSync('./scripts/config.json')) {
   throw new Error('Missing scripts/config.json. Run `pnpm verify:first -- --write-config`, then fill dusdcType/dusdcCoinId if you want setup to fund the manager.');
@@ -23,6 +25,7 @@ function keypairFromEnv() {
 
 const keypair = keypairFromEnv();
 const client = new SuiJsonRpcClient({ url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });
+const sender = keypair.getPublicKey().toSuiAddress();
 
 const createTx = new Transaction();
 createTx.moveCall({ target: `${cfg.dbp}::predict::create_manager`, arguments: [] });
@@ -56,6 +59,31 @@ if (cfg.dusdcType && cfg.dusdcCoinId) {
 }
 
 const deploy = existsSync('./deploy.json') ? JSON.parse(readFileSync('./deploy.json', 'utf8')) : {};
-writeFileSync('./deploy.json', JSON.stringify({ ...deploy, managerId }, null, 2));
-writeFileSync('./scripts/config.json', `${JSON.stringify({ ...cfg, managerId, sender: keypair.getPublicKey().toSuiAddress() }, null, 2)}\n`);
+let vaultId = deploy.vaultId as string | undefined;
+let managerEscrowId = deploy.managerEscrowId as string | undefined;
+if (deploy.packageId && deploy.shareFactoryId && cfg.dusdcType) {
+  const vaultTx = new VaultClient(client, deploy.packageId).buildCreateVaultWithManagerEscrowTx({
+    factoryId: deploy.shareFactoryId,
+    quoteType: cfg.dusdcType,
+    managerId,
+    recipient: sender,
+    minDeposit: Number(process.env.STUDIO_MIN_DEPOSIT ?? 1_000_000),
+    performanceFeeBps: Number(process.env.STUDIO_PERF_FEE_BPS ?? 1_000),
+    strategy: process.env.STUDIO_STRATEGY ?? 'fixed_coupon_range',
+  });
+  const vaultSetup = await client.signAndExecuteTransaction({
+    signer: keypair,
+    transaction: vaultTx,
+    options: { showEffects: true, showObjectChanges: true },
+  });
+  if (vaultSetup.effects?.status.status !== 'success') {
+    throw new Error(`vault setup failed: ${vaultSetup.effects?.status.error ?? 'unknown error'}`);
+  }
+  ({ vaultId, managerEscrowId } = parseVaultSetupResult(vaultSetup));
+}
+
+writeFileSync('./deploy.json', JSON.stringify({ ...deploy, managerId, vaultId, managerEscrowId }, null, 2));
+writeFileSync('./scripts/config.json', `${JSON.stringify({ ...cfg, managerId, vaultId, managerEscrowId, sender }, null, 2)}\n`);
 console.log('manager:', managerId);
+if (vaultId) console.log('vault:', vaultId);
+if (managerEscrowId) console.log('manager escrow:', managerEscrowId);

@@ -61,6 +61,49 @@ module predict_studio::vault_tests {
     }
 
     #[test]
+    fun factory_can_share_vault_and_bind_manager_escrow_in_one_call() {
+        let sender = @0xA;
+        let mut scenario = test_scenario::begin(sender);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        let vault_id;
+        scenario.next_tx(sender);
+        {
+            let factory = vault::new_factory_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_and_share_vault_with_manager_escrow<vault::DUSDC_T>(
+                factory,
+                &manager,
+                1,
+                1_000,
+                string::utf8(b"shared"),
+                scenario.ctx(),
+            );
+            vault_id = vault::escrow_vault_id(&escrow);
+            assert!(vault::escrow_manager_id(&escrow) == manager_id, 0);
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+        };
+
+        scenario.next_tx(sender);
+        {
+            let mut v = scenario.take_shared_by_id<vault::StructuredVault<vault::DUSDC_T>>(vault_id);
+            let shares = vault::deposit(
+                &mut v,
+                coin::mint_for_testing<vault::DUSDC_T>(1_000_000, scenario.ctx()),
+                scenario.ctx(),
+            );
+            assert!(coin::value(&shares) > 0, 1);
+            coin::burn_for_testing(shares);
+            test_scenario::return_shared(v);
+        };
+        scenario.end();
+    }
+
+    #[test]
     fun first_deposit_mints_shares_and_sets_accounted_balance() {
         let mut ctx = tx_context::dummy();
         let mut v = vault::new_for_testing(&mut ctx);

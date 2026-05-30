@@ -20,6 +20,41 @@ describe('VaultClient', () => {
     expect(escrowTx.getData().commands[0].MoveCall?.typeArguments).toEqual([ids.quoteType]);
   });
 
+  it('builds a create-and-share vault transaction from a share factory', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildCreateAndShareVaultTx({
+      factoryId: '0x3',
+      quoteType: ids.quoteType,
+      managerOwner: ids.recipient,
+      minDeposit: 1_000_000,
+      performanceFeeBps: 1_000,
+      strategy: 'fixed_coupon_range',
+    });
+
+    const call = tx.getData().commands[0].MoveCall;
+    expect(call?.module).toBe('vault');
+    expect(call?.function).toBe('create_and_share_vault');
+    expect(call?.typeArguments).toEqual([ids.quoteType]);
+  });
+
+  it('builds a create-and-share vault transaction with manager escrow binding', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildCreateVaultWithManagerEscrowTx({
+      factoryId: '0x3',
+      quoteType: ids.quoteType,
+      managerId: '0x5',
+      recipient: ids.recipient,
+      minDeposit: 1_000_000,
+      performanceFeeBps: 1_000,
+      strategy: 'fixed_coupon_range',
+    });
+
+    const data = tx.getData();
+    expect(data.commands[0].MoveCall?.function).toBe('create_and_share_vault_with_manager_escrow');
+    expect(data.commands[0].MoveCall?.typeArguments).toEqual([ids.quoteType]);
+    expect(data.commands[1].TransferObjects).toBeDefined();
+  });
+
   it('reads NAV from a devInspect u64 return value', async () => {
     const client = new VaultClient(
       {

@@ -12,7 +12,8 @@ Predict Studio turns raw Predict binary/range instruments into trader-facing pay
   - `settle_to_receipt` redeems all legs and emits P&L.
   - `max_payout` computes best-case payout across strike breakpoints.
 - Vault, tranche, collateral, RFQ, and Kiosk note Move modules
-  - `vault.move` mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, and capped publisher fees.
+  - `studio_lp.move` creates the real `STUDIO_LP` currency and publish-time share factory.
+  - `vault.move` consumes that factory to create/share a depositable vault, mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, capped publisher fees, and signer-owned PredictManager escrow binding.
   - `pt_yt.move` splits vault shares into PT/YT and conserves redemption value through the maturity waterfall.
   - `studio_collateral.move` is an isolated dUSDC lending market against the provable floor of `Coin<STUDIO_LP>`.
   - `rfq.move` verifies Ed25519 signatures over canonical BCS quote bytes, binds quotes to the canonical structure hash, enforces TTL, prevents replay, and exposes an atomic `fill_quote` path.
@@ -32,8 +33,8 @@ Predict Studio turns raw Predict binary/range instruments into trader-facing pay
   - payoff chart, structure summary, solver inspector, mint action, vault market, tranches, creator leaderboard, portfolio grid, positions, and backtest
 - Scripts in `scripts/`
   - verify-first live gate checker for `/oracles`, `create_manager`, devInspect quote decoding, and local config generation
-  - deploy package
-  - create and optionally fund a PredictManager
+  - deploy package and record the publish-time `ShareFactory`
+  - create and optionally fund a PredictManager; if deployed package/factory data is present, create a shared vault and manager escrow
   - gas benchmark for per-PTB leg cap
   - deterministic seed config for the 12 demo vaults
   - keeper dry-run planner for pending-deposit processing / roll PTBs
@@ -68,7 +69,7 @@ pnpm verify:first -- --write-config
 
 - `oracleId`, `expiry`, `minStrike`, `tickSize`, and `dbp` are generated from `/oracles` + Sui RPC
 - `dusdcType`, `dusdcCoinId`, and funded wallet details after receiving testnet dUSDC
-- `managerId` after running `pnpm setup`
+- `managerId`, `vaultId`, and `managerEscrowId` after running `pnpm setup`
 
 The app reads these public environment variables:
 
@@ -94,6 +95,6 @@ pnpm dev
 
 ## Remaining Live Gates
 
-- Confirm vault-owned `PredictManager` borrowing semantics before wiring `vault::roll_into_strategy`.
+- Wire the next vault roll function through the signer-owned manager escrow path and validate it on testnet.
 - Confirm Enoki sponsor app id/allowlist, Pyth BTC/USD object id, Cetus custom-pool creation, Walrus publisher endpoint, Kiosk marketplace flow against testnet, and any Suilend listing story.
 - Run `pnpm bench`, deploy, create/fund a manager, mint, settle, and record transaction digests once dUSDC and SUI are available.
