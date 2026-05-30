@@ -1,4 +1,5 @@
-import { MAX_LEGS_PER_PTB, type Decomposition, type Leg, type OracleState, type PricedDecomp } from './types';
+import { priceSolution, solveSparse } from './solver';
+import { MAX_LEGS_PER_PTB, type Decomposition, type Leg, type OracleState, type PricedDecomp, type SparseTarget, type SVI } from './types';
 
 export type QuoteLeg = (leg: Leg) => Promise<number>;
 
@@ -53,4 +54,12 @@ export async function optimize(
     all: priced,
     savingsVsNaive: Math.max(0, baseCost - priced[0].totalCost),
   };
+}
+
+export function optimizeSparse(target: SparseTarget, svi: SVI, forward: number) {
+  const candidates = [4, 6, 8].map((maxLegs) =>
+    priceSolution(solveSparse(target, { maxLegs, tol: 0.005 }), svi, forward),
+  );
+  candidates.sort((a, b) => a.premiumEst - b.premiumEst || a.legCount - b.legCount);
+  return { best: candidates[0], all: candidates };
 }

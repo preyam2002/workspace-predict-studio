@@ -4,19 +4,24 @@ import { ConnectButton, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit
 import { useQuery } from '@tanstack/react-query';
 import { WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { buildCatalogTarget, type CatalogProductId } from '@/lib/catalog';
 import { decompose } from '@/lib/decompose';
-import { optimize } from '@/lib/optimizer';
+import { optimize, optimizeSparse } from '@/lib/optimizer';
 import { breakevens, ev, legProb, maxGain } from '@/lib/payoff';
 import { PredictClient, loadOracleState } from '@/lib/predict-client';
 import { USDC, type OracleState, type StructureQuote, type Template } from '@/lib/types';
 import { Backtester } from './Backtester';
+import { CatalogPicker } from './CatalogPicker';
 import { MintButton } from './MintButton';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
 import { PositionsDashboard } from './PositionsDashboard';
 import { ScenarioSliders, type Scenario } from './ScenarioSliders';
+import { SolverInspector } from './SolverInspector';
 import { StructureSummary } from './StructureSummary';
 import { TemplatePicker, defaultTemplate } from './TemplatePicker';
+import { TranchePanel } from './TranchePanel';
+import { VaultMarket } from './VaultMarket';
 
 const STUDIO_PACKAGE = process.env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE ?? '0x0';
 
@@ -42,6 +47,8 @@ export function Builder() {
   });
   const oracle = oracleQuery.data ? withScenario(oracleQuery.data, scenario) : undefined;
   const [template, setTemplate] = useState<Template | null>(null);
+  const [quoteMode, setQuoteMode] = useState<'template' | 'catalog'>('template');
+  const [catalogId, setCatalogId] = useState<CatalogProductId>('fixed_coupon_range');
   const [quote, setQuote] = useState<StructureQuote | undefined>();
   const [quoteSource, setQuoteSource] = useState('local SVI estimate');
   const [digest, setDigest] = useState<string | undefined>();
@@ -56,8 +63,28 @@ export function Builder() {
 
   useEffect(() => {
     if (!oracle || !template) return;
-    const base = decompose(template, oracle);
     let active = true;
+
+    if (quoteMode === 'catalog') {
+      const target = buildCatalogTarget(catalogId, oracle);
+      const res = optimizeSparse(target, oracle.svi, oracle.forward);
+      const totalCost = Math.round(res.best.premiumEst * USDC);
+      setQuoteSource('NNOMP sparse SVI estimate');
+      setQuote({
+        legs: res.best.legs,
+        totalCost,
+        maxLoss: totalCost,
+        maxGain: maxGain(res.best.legs, totalCost),
+        breakevens: breakevens(res.best.legs, totalCost),
+        ev: ev(res.best.legs, oracle.svi, oracle.forward, totalCost),
+        savingsVsNaive: 0,
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    const base = decompose(template, oracle);
 
     const quoteLeg = async (leg: (typeof base.legs)[number]) => {
       if (account) {
@@ -93,7 +120,9 @@ export function Builder() {
     return () => {
       active = false;
     };
-  }, [account, client, oracle, template]);
+  }, [account, catalogId, client, oracle, quoteMode, template]);
+
+  const catalogTarget = useMemo(() => (oracle ? buildCatalogTarget(catalogId, oracle) : undefined), [catalogId, oracle]);
 
   return (
     <main className="app-shell">
@@ -118,13 +147,27 @@ export function Builder() {
       {oracle && template ? (
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr_360px]">
           <div className="grid content-start gap-4">
-            <TemplatePicker oracle={oracle} template={template} onChange={setTemplate} />
+            <TemplatePicker
+              oracle={oracle}
+              template={template}
+              onChange={(next) => {
+                setQuoteMode('template');
+                setTemplate(next);
+              }}
+            />
+            <CatalogPicker
+              selected={catalogId}
+              onChange={(id) => {
+                setCatalogId(id);
+                setQuoteMode('catalog');
+              }}
+            />
             <ScenarioSliders scenario={scenario} onChange={setScenario} />
             <MintButton
               client={client}
               oracle={oracle}
               legs={quote?.legs ?? []}
-              shape={template.kind}
+              shape={quoteMode === 'catalog' ? catalogId : template.kind}
               maxLossBudget={quote?.totalCost ?? 0}
               disabled={!account || STUDIO_PACKAGE === '0x0'}
               onMinted={setDigest}
@@ -154,10 +197,16 @@ export function Builder() {
 
           <div className="grid content-start gap-4">
             <StructureSummary quote={quote} quoteSource={quoteSource} />
+            {catalogTarget ? <SolverInspector oracle={oracle} target={catalogTarget} /> : null}
             <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} />
+            <TranchePanel />
           </div>
         </div>
       ) : null}
+
+      <div className="mt-4">
+        <VaultMarket oracle={oracle} />
+      </div>
 
       <div className="mt-4">
         <PositionsDashboard client={client} oracle={oracle} />

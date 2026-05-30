@@ -66,6 +66,20 @@ export interface TargetPayoff {
   regions: Region[];
 }
 
+/** A target payoff sampled on the strike grid: g[i] = payoff USD at gridStrikes[i]. */
+export interface SparseTarget {
+  gridStrikes: number[];
+  g: number[];
+}
+
+export interface SparseSolution {
+  legs: Leg[];
+  l2Error: number;
+  maxAbsError: number;
+  premiumEst: number;
+  legCount: number;
+}
+
 export type Template =
   | { kind: 'digital_call'; K: number; qty: number }
   | { kind: 'digital_put'; K: number; qty: number }

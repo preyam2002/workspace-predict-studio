@@ -1,0 +1,9 @@
+{
+  "vaultId": "0x...",
+  "keeperCapId": "0x...",
+  "quoteType": "0x...::dusdc::DUSDC",
+  "budget": 50000000,
+  "downsideDelta": 0.25,
+  "upsideDelta": 0.25,
+  "dryRun": true
+}

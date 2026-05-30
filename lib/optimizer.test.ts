@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { optimize } from './optimizer';
-import type { Decomposition, OracleState } from './types';
+import { optimize, optimizeSparse } from './optimizer';
+import type { Decomposition, OracleState, SVI } from './types';
 
 const oracle = {} as OracleState;
 
@@ -19,5 +19,20 @@ describe('optimize', () => {
     expect(res.best.legCount).toBe(1);
     expect(res.best.totalCost).toBe(700);
     expect(res.savingsVsNaive).toBe(300);
+  });
+
+  it('returns a sparse candidate under the PTB leg cap', () => {
+    const svi: SVI = { a: 0.04, b: 0.1, rho: -0.3, m: 0, sigma: 0.2 };
+    const res = optimizeSparse(
+      {
+        gridStrikes: [90, 100, 110, 120, 130, 140],
+        g: [0, 0, 1, 2, 2, 1],
+      },
+      svi,
+      115,
+    );
+
+    expect(res.best.legCount).toBeLessThanOrEqual(8);
+    expect(res.all).toHaveLength(3);
   });
 });
