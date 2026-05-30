@@ -1,9 +1,9 @@
 #[test_only]
 module predict_studio::studio_collateral_tests {
-    use predict_studio::{studio_collateral, vault};
+    use predict_studio::{studio_collateral, studio_lp::STUDIO_LP, vault};
     use sui::{coin, tx_context};
 
-    fun share(ctx: &mut tx_context::TxContext): (vault::StructuredVault<vault::DUSDC_T>, coin::Coin<vault::STUDIO_LP>) {
+    fun share(ctx: &mut tx_context::TxContext): (vault::StructuredVault<vault::DUSDC_T>, coin::Coin<STUDIO_LP>) {
         let mut v = vault::new_for_testing(ctx);
         let s = vault::deposit(
             &mut v,

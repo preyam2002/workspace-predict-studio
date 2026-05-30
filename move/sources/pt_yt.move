@@ -1,5 +1,5 @@
 module predict_studio::pt_yt {
-    use predict_studio::vault::{DUSDC_T, STUDIO_LP};
+    use predict_studio::{studio_lp::STUDIO_LP, vault::DUSDC_T};
     use sui::{
         balance::{Self, Balance},
         coin::{Self, Coin, TreasuryCap},

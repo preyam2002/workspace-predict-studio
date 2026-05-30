@@ -1,10 +1,12 @@
 module predict_studio::vault {
+    use predict_studio::studio_lp::{Self as studio_lp, ShareFactory, STUDIO_LP};
     use std::string::{Self, String};
     use sui::{
         balance::{Self, Balance},
         coin::{Self, Coin, TreasuryCap},
         event,
         object::{Self, UID},
+        transfer,
         tx_context::{Self, TxContext},
     };
 
@@ -28,8 +30,6 @@ module predict_studio::vault {
     const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
     public struct DUSDC_T has drop {}
-
-    public struct STUDIO_LP has drop {}
 
     public struct StructuredVault<phantom Quote> has key, store {
         id: UID,
@@ -80,6 +80,14 @@ module predict_studio::vault {
         volume: u64,
     }
 
+    public struct VaultCreated has copy, drop {
+        vault_id: ID,
+        manager_owner: address,
+        min_deposit: u64,
+        performance_fee_bps: u64,
+        strategy: String,
+    }
+
     public fun accounted_assets<Q>(v: &StructuredVault<Q>): u64 { v.accounted_assets }
 
     public fun pending_assets<Q>(v: &StructuredVault<Q>): u64 { balance::value(&v.pending) }
@@ -124,6 +132,69 @@ module predict_studio::vault {
         if (v.hwm_pps_num == 0 && v.total_shares > 0) {
             v.hwm_pps_num = pps_num(v);
         }
+    }
+
+    fun new_vault<Q>(
+        share_treasury: TreasuryCap<STUDIO_LP>,
+        manager_owner: address,
+        min_deposit: u64,
+        performance_fee_bps: u64,
+        strategy: String,
+        ctx: &mut TxContext,
+    ): StructuredVault<Q> {
+        StructuredVault {
+            id: object::new(ctx),
+            manager_owner,
+            idle: balance::zero<Q>(),
+            pending: balance::zero<Q>(),
+            accounted_assets: 0,
+            share_treasury,
+            total_shares: 0,
+            hwm_pps_num: 0,
+            min_deposit,
+            performance_fee_bps,
+            current_epoch: 0,
+            claim_epoch: 0,
+            claim_assets: 0,
+            claim_shares: 0,
+            strategy_open: false,
+            strategy,
+        }
+    }
+
+    public fun create_vault<Q>(
+        factory: ShareFactory,
+        manager_owner: address,
+        min_deposit: u64,
+        performance_fee_bps: u64,
+        strategy: String,
+        ctx: &mut TxContext,
+    ): StructuredVault<Q> {
+        let share_treasury = studio_lp::into_treasury(factory);
+        let v = new_vault<Q>(share_treasury, manager_owner, min_deposit, performance_fee_bps, strategy, ctx);
+        event::emit(VaultCreated {
+            vault_id: object::id(&v),
+            manager_owner,
+            min_deposit,
+            performance_fee_bps,
+            strategy: v.strategy,
+        });
+        v
+    }
+
+    #[allow(lint(share_owned))]
+    public fun create_and_share_vault<Q>(
+        factory: ShareFactory,
+        manager_owner: address,
+        min_deposit: u64,
+        performance_fee_bps: u64,
+        strategy: String,
+        ctx: &mut TxContext,
+    ): ID {
+        let v = create_vault<Q>(factory, manager_owner, min_deposit, performance_fee_bps, strategy, ctx);
+        let vault_id = object::id(&v);
+        transfer::public_share_object(v);
+        vault_id
     }
 
     public fun deposit<Q>(v: &mut StructuredVault<Q>, c: Coin<Q>, ctx: &mut TxContext): Coin<STUDIO_LP> {
@@ -304,26 +375,14 @@ module predict_studio::vault {
     }
 
     #[test_only]
+    public fun new_factory_for_testing(ctx: &mut TxContext): ShareFactory {
+        studio_lp::new_factory_for_testing(ctx)
+    }
+
+    #[test_only]
     public fun new_for_testing(ctx: &mut TxContext): StructuredVault<DUSDC_T> {
-        let cap = coin::create_treasury_cap_for_testing<STUDIO_LP>(ctx);
-        StructuredVault {
-            id: object::new(ctx),
-            manager_owner: tx_context::sender(ctx),
-            idle: balance::zero<DUSDC_T>(),
-            pending: balance::zero<DUSDC_T>(),
-            accounted_assets: 0,
-            share_treasury: cap,
-            total_shares: 0,
-            hwm_pps_num: 0,
-            min_deposit: 1,
-            performance_fee_bps: 1_000,
-            current_epoch: 0,
-            claim_epoch: 0,
-            claim_assets: 0,
-            claim_shares: 0,
-            strategy_open: false,
-            strategy: string::utf8(b"test"),
-        }
+        let factory = new_factory_for_testing(ctx);
+        create_vault<DUSDC_T>(factory, tx_context::sender(ctx), 1, 1_000, string::utf8(b"test"), ctx)
     }
 
     #[test_only]

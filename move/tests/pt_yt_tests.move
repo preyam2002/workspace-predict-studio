@@ -1,9 +1,9 @@
 #[test_only]
 module predict_studio::pt_yt_tests {
-    use predict_studio::{pt_yt, vault};
+    use predict_studio::{pt_yt, studio_lp::STUDIO_LP, vault};
     use sui::{coin, tx_context};
 
-    fun minted_share(ctx: &mut tx_context::TxContext): (vault::StructuredVault<vault::DUSDC_T>, coin::Coin<vault::STUDIO_LP>) {
+    fun minted_share(ctx: &mut tx_context::TxContext): (vault::StructuredVault<vault::DUSDC_T>, coin::Coin<STUDIO_LP>) {
         let mut v = vault::new_for_testing(ctx);
         let shares = vault::deposit(
             &mut v,

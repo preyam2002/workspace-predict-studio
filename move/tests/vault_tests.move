@@ -2,8 +2,63 @@
 module predict_studio::vault_tests {
     use predict_studio::vault;
     use deepbook_predict::{predict, predict_manager::PredictManager};
+    use std::string;
     use sui::test_scenario::{Self as test_scenario};
     use sui::{coin, object, tx_context};
+
+    #[test]
+    fun factory_creates_depositable_production_vault() {
+        let mut ctx = tx_context::dummy();
+        let factory = vault::new_factory_for_testing(&mut ctx);
+        let mut v = vault::create_vault<vault::DUSDC_T>(
+            factory,
+            @0xA,
+            1,
+            1_000,
+            string::utf8(b"prod"),
+            &mut ctx,
+        );
+        let dep = coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx);
+        let shares = vault::deposit(&mut v, dep, &mut ctx);
+
+        assert!(coin::value(&shares) > 0, 0);
+        assert!(vault::accounted_assets(&v) == 1_000_000, 1);
+
+        coin::burn_for_testing(shares);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test]
+    fun factory_create_and_share_vault_transfers_shared_object() {
+        let sender = @0xA;
+        let mut scenario = test_scenario::begin(sender);
+        let vault_id;
+        {
+            let factory = vault::new_factory_for_testing(scenario.ctx());
+            vault_id = vault::create_and_share_vault<vault::DUSDC_T>(
+                factory,
+                sender,
+                1,
+                1_000,
+                string::utf8(b"shared"),
+                scenario.ctx(),
+            );
+        };
+
+        scenario.next_tx(sender);
+        {
+            let mut v = scenario.take_shared_by_id<vault::StructuredVault<vault::DUSDC_T>>(vault_id);
+            let shares = vault::deposit(
+                &mut v,
+                coin::mint_for_testing<vault::DUSDC_T>(1_000_000, scenario.ctx()),
+                scenario.ctx(),
+            );
+            assert!(coin::value(&shares) > 0, 0);
+            coin::burn_for_testing(shares);
+            test_scenario::return_shared(v);
+        };
+        scenario.end();
+    }
 
     #[test]
     fun first_deposit_mints_shares_and_sets_accounted_balance() {
