@@ -6,15 +6,19 @@ import { WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { buildCatalogTarget, type CatalogProductId } from '@/lib/catalog';
 import { decompose } from '@/lib/decompose';
+import { getPublisherLeaderboard } from '@/lib/indexer';
 import { optimize, optimizeSparse } from '@/lib/optimizer';
 import { breakevens, ev, legProb, maxGain } from '@/lib/payoff';
 import { PredictClient, loadOracleState } from '@/lib/predict-client';
-import { USDC, type OracleState, type StructureQuote, type Template } from '@/lib/types';
+import { USDC, type OracleState, type SparseTarget, type StructureQuote, type Template } from '@/lib/types';
 import { Backtester } from './Backtester';
 import { CatalogPicker } from './CatalogPicker';
+import { CreatorLeaderboard } from './CreatorLeaderboard';
+import { DrawPayoffCanvas, defaultDrawTarget } from './DrawPayoffCanvas';
 import { MintButton } from './MintButton';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
+import { PortfolioPanel } from './PortfolioPanel';
 import { PositionsDashboard } from './PositionsDashboard';
 import { ScenarioSliders, type Scenario } from './ScenarioSliders';
 import { SolverInspector } from './SolverInspector';
@@ -45,10 +49,15 @@ export function Builder() {
     queryKey: ['oracle-state'],
     queryFn: () => loadOracleState(sui),
   });
+  const publisherQuery = useQuery({
+    queryKey: ['publisher-leaderboard', STUDIO_PACKAGE],
+    queryFn: () => (STUDIO_PACKAGE === '0x0' ? [] : getPublisherLeaderboard(sui, STUDIO_PACKAGE)),
+  });
   const oracle = oracleQuery.data ? withScenario(oracleQuery.data, scenario) : undefined;
   const [template, setTemplate] = useState<Template | null>(null);
-  const [quoteMode, setQuoteMode] = useState<'template' | 'catalog'>('template');
+  const [quoteMode, setQuoteMode] = useState<'template' | 'catalog' | 'draw'>('template');
   const [catalogId, setCatalogId] = useState<CatalogProductId>('fixed_coupon_range');
+  const [drawTarget, setDrawTarget] = useState<SparseTarget | null>(null);
   const [quote, setQuote] = useState<StructureQuote | undefined>();
   const [quoteSource, setQuoteSource] = useState('local SVI estimate');
   const [digest, setDigest] = useState<string | undefined>();
@@ -59,14 +68,16 @@ export function Builder() {
 
   useEffect(() => {
     if (oracle && !template) setTemplate(defaultTemplate(oracle));
-  }, [oracle, template]);
+    if (oracle && !drawTarget) setDrawTarget(defaultDrawTarget(oracle));
+  }, [drawTarget, oracle, template]);
 
   useEffect(() => {
     if (!oracle || !template) return;
     let active = true;
 
-    if (quoteMode === 'catalog') {
-      const target = buildCatalogTarget(catalogId, oracle);
+    if (quoteMode === 'catalog' || quoteMode === 'draw') {
+      const target = quoteMode === 'catalog' ? buildCatalogTarget(catalogId, oracle) : drawTarget;
+      if (!target) return;
       const res = optimizeSparse(target, oracle.svi, oracle.forward);
       const totalCost = Math.round(res.best.premiumEst * USDC);
       setQuoteSource('NNOMP sparse SVI estimate');
@@ -120,9 +131,14 @@ export function Builder() {
     return () => {
       active = false;
     };
-  }, [account, catalogId, client, oracle, quoteMode, template]);
+  }, [account, catalogId, client, drawTarget, oracle, quoteMode, template]);
 
-  const catalogTarget = useMemo(() => (oracle ? buildCatalogTarget(catalogId, oracle) : undefined), [catalogId, oracle]);
+  const sparseTarget = useMemo(() => {
+    if (!oracle) return undefined;
+    if (quoteMode === 'catalog') return buildCatalogTarget(catalogId, oracle);
+    if (quoteMode === 'draw') return drawTarget ?? undefined;
+    return undefined;
+  }, [catalogId, drawTarget, oracle, quoteMode]);
 
   return (
     <main className="app-shell">
@@ -162,12 +178,21 @@ export function Builder() {
                 setQuoteMode('catalog');
               }}
             />
+            {drawTarget ? (
+              <DrawPayoffCanvas
+                target={drawTarget}
+                onChange={(target) => {
+                  setDrawTarget(target);
+                  setQuoteMode('draw');
+                }}
+              />
+            ) : null}
             <ScenarioSliders scenario={scenario} onChange={setScenario} />
             <MintButton
               client={client}
               oracle={oracle}
               legs={quote?.legs ?? []}
-              shape={quoteMode === 'catalog' ? catalogId : template.kind}
+              shape={quoteMode === 'catalog' ? catalogId : quoteMode === 'draw' ? 'drawn_payoff' : template.kind}
               maxLossBudget={quote?.totalCost ?? 0}
               disabled={!account || STUDIO_PACKAGE === '0x0'}
               onMinted={setDigest}
@@ -197,9 +222,11 @@ export function Builder() {
 
           <div className="grid content-start gap-4">
             <StructureSummary quote={quote} quoteSource={quoteSource} />
-            {catalogTarget ? <SolverInspector oracle={oracle} target={catalogTarget} /> : null}
+            {sparseTarget ? <SolverInspector oracle={oracle} target={sparseTarget} /> : null}
             <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} />
             <TranchePanel />
+            <CreatorLeaderboard ranks={publisherQuery.data ?? []} />
+            {quote ? <PortfolioPanel oracle={oracle} positions={[{ legs: quote.legs, premium: quote.totalCost }]} /> : null}
           </div>
         </div>
       ) : null}

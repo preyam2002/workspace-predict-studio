@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { optimize, optimizeSparse } from './optimizer';
+import { optimize, optimizeBasket, optimizeSparse } from './optimizer';
 import type { Decomposition, OracleState, SVI } from './types';
 
 const oracle = {} as OracleState;
@@ -34,5 +34,19 @@ describe('optimize', () => {
 
     expect(res.best.legCount).toBeLessThanOrEqual(8);
     expect(res.all).toHaveLength(3);
+  });
+
+  it('exposes impact-aware sequential basket optimization', () => {
+    const svi: SVI = { a: 0.04, b: 0.1, rho: -0.3, m: 0, sigma: 0.2 };
+    const legs = [
+      { isRange: false, isUp: true, lowerStrike: 100, higherStrike: 0, quantity: 1_000_000 },
+      { isRange: false, isUp: true, lowerStrike: 110, higherStrike: 0, quantity: 2_000_000 },
+    ];
+    const res = optimizeBasket(legs, svi, 100, { mtm: 100_000, balance: 10_000_000 });
+
+    expect(res.order).toHaveLength(2);
+    expect(res.totalCost).toBeGreaterThan(0);
+    expect(res.impactCost).toBeGreaterThanOrEqual(0);
+    expect(res.exposureOk).toBe(true);
   });
 });

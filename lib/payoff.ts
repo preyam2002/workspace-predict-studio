@@ -1,3 +1,4 @@
+import { detectButterflyViolation, repairedDigitals } from './arbfree';
 import type { Leg, SVI } from './types';
 
 export function normCdf(x: number): number {
@@ -17,6 +18,10 @@ export function totalVariance(svi: SVI, k: number): number {
 }
 
 export function priceUp(svi: SVI, forward: number, strike: number): number {
+  const check = detectButterflyViolation(svi, 1, { kLo: -2, kHi: 2, dk: 0.01 });
+  if (!check.ok) {
+    return repairedDigitals(svi, forward, [strike], { dk: 0.005 })[0]?.up ?? 0;
+  }
   const k = Math.log(strike / forward);
   const w = Math.max(totalVariance(svi, k), 1e-12);
   const d2 = (Math.log(forward / strike) - 0.5 * w) / Math.sqrt(w);
@@ -28,7 +33,13 @@ export function priceDown(svi: SVI, forward: number, strike: number): number {
 }
 
 export function priceRange(svi: SVI, forward: number, lo: number, hi: number): number {
-  return Math.max(0.001, priceUp(svi, forward, lo) - priceUp(svi, forward, hi));
+  const strikes = [Math.min(lo, hi), Math.max(lo, hi)];
+  const check = detectButterflyViolation(svi, 1, { kLo: -2, kHi: 2, dk: 0.01 });
+  if (!check.ok) {
+    const repaired = repairedDigitals(svi, forward, strikes, { dk: 0.005 });
+    return Math.max(0, repaired[0].up - repaired[1].up);
+  }
+  return Math.max(0, priceUp(svi, forward, strikes[0]) - priceUp(svi, forward, strikes[1]));
 }
 
 export function impliedProb(askPriceScaled: number): number {

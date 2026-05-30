@@ -3,6 +3,7 @@ module predict_studio::vault {
     use sui::{
         balance::{Self, Balance},
         coin::{Self, Coin, TreasuryCap},
+        event,
         object::{Self, UID},
         tx_context::{Self, TxContext},
     };
@@ -20,6 +21,9 @@ module predict_studio::vault {
     const EUnclaimedBatch: u64 = 7;
     const ENotKeeper: u64 = 8;
     const EBudgetTooHigh: u64 = 9;
+    const EFeeTooHigh: u64 = 10;
+
+    const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
     public struct DUSDC_T has drop {}
 
@@ -57,6 +61,14 @@ module predict_studio::vault {
         vault_id: ID,
         owner: address,
         max_budget: u64,
+    }
+
+    public struct PublisherFeePaid has copy, drop {
+        vault_id: ID,
+        publisher: address,
+        fee_paid: u64,
+        fee_bps: u64,
+        volume: u64,
     }
 
     public fun accounted_assets<Q>(v: &StructuredVault<Q>): u64 { v.accounted_assets }
@@ -116,6 +128,30 @@ module predict_studio::vault {
         v.total_shares = v.total_shares + minted;
         ratchet_initial_hwm(v);
         coin::mint(&mut v.share_treasury, minted, ctx)
+    }
+
+    public fun deposit_with_publisher<Q>(
+        v: &mut StructuredVault<Q>,
+        mut c: Coin<Q>,
+        publisher: address,
+        fee_bps: u64,
+        ctx: &mut TxContext,
+    ): (Coin<STUDIO_LP>, Coin<Q>, address) {
+        assert!(fee_bps <= MAX_PUBLISHER_FEE_BPS, EFeeTooHigh);
+        let volume = coin::value(&c);
+        let fee = volume * fee_bps / 10_000;
+        let fee_coin = if (fee > 0) coin::split(&mut c, fee, ctx) else coin::zero<Q>(ctx);
+        if (fee > 0) {
+            event::emit(PublisherFeePaid {
+                vault_id: object::id(v),
+                publisher,
+                fee_paid: fee,
+                fee_bps,
+                volume,
+            });
+        };
+        let shares = deposit(v, c, ctx);
+        (shares, fee_coin, publisher)
     }
 
     public fun withdraw<Q>(v: &mut StructuredVault<Q>, s: Coin<STUDIO_LP>, ctx: &mut TxContext): Coin<Q> {

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildDictionary, nnls, priceSolution, solveSparse } from './solver';
+import {
+  buildDictionary,
+  certifyGap,
+  nnls,
+  priceSolution,
+  solveBranchAndBound,
+  solveCertifiedSparse,
+  solveExact,
+  solveSparse,
+} from './solver';
 import type { SparseTarget, SVI } from './types';
 
 describe('nnls', () => {
@@ -78,5 +87,36 @@ describe('priceSolution', () => {
     const priced = priceSolution(sol, svi, 100_000);
     expect(priced.premiumEst).toBeGreaterThan(0);
     expect(priced.premiumEst).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('exact sparse solving and certification', () => {
+  const target: SparseTarget = {
+    gridStrikes: [90, 100, 110, 120],
+    g: [1, 0, 1, 0],
+  };
+
+  it('finds an exact solution no worse than NNOMP on small dictionaries', () => {
+    const greedy = solveSparse(target, { maxLegs: 2, tol: 0.001, maxMacroWidth: 2 });
+    const exact = solveExact(target, { maxLegs: 2, tol: 0.001, maxMacroWidth: 2 });
+    expect(exact.l2Error).toBeLessThanOrEqual(greedy.l2Error + 1e-9);
+    expect(exact.legCount).toBeLessThanOrEqual(2);
+  });
+
+  it('branch-and-bound matches exhaustive exact solving when the node budget covers the search', () => {
+    const exact = solveExact(target, { maxLegs: 2, tol: 0.001, maxMacroWidth: 2 });
+    const bnb = solveBranchAndBound(target, { maxLegs: 2, tol: 0.001, maxMacroWidth: 2, maxNodes: 50_000 });
+    expect(bnb.l2Error).toBeCloseTo(exact.l2Error, 9);
+  });
+
+  it('returns a coherence certificate and a certified-or-exact solution', () => {
+    const cert = certifyGap(target, 2, { maxMacroWidth: 2 });
+    expect(cert.coherence).toBeGreaterThanOrEqual(0);
+    expect(typeof cert.exactRecovery).toBe('boolean');
+    expect(cert.gapBound).toBeGreaterThanOrEqual(0);
+
+    const res = solveCertifiedSparse(target, { maxLegs: 2, tol: 0.001, maxMacroWidth: 2 });
+    expect(res.solution.legCount).toBeLessThanOrEqual(2);
+    expect(res.certificate.coherence).toBe(cert.coherence);
   });
 });

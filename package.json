@@ -7,13 +7,17 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "verify:first": "tsx scripts/verify-first.ts",
     "deploy": "tsx scripts/deploy.ts",
     "setup": "tsx scripts/setup-manager.ts",
-    "bench": "tsx scripts/gas-benchmark.ts"
+    "bench": "tsx scripts/gas-benchmark.ts",
+    "seed:vaults": "tsx scripts/seed-vaults.ts",
+    "keeper:roll": "tsx keeper/roll.ts"
   },
   "dependencies": {
     "@mysten/dapp-kit": "^1.0.6",
     "@mysten/sui": "^2.17.0",
+    "@noble/hashes": "^1.8.0",
     "@tanstack/react-query": "^5.100.14",
     "lucide-react": "^1.17.0",
     "next": "^16.2.6",

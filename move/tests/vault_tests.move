@@ -104,6 +104,54 @@ module predict_studio::vault_tests {
     }
 
     #[test]
+    fun deposit_with_publisher_splits_capped_fee_and_preserves_zero_fee_path() {
+        let mut ctx = tx_context::dummy();
+        let mut v = vault::new_for_testing(&mut ctx);
+        let (shares, fee, publisher) = vault::deposit_with_publisher(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            @0xB,
+            10,
+            &mut ctx,
+        );
+        assert!(publisher == @0xB, 0);
+        assert!(coin::value(&fee) == 1_000, 1);
+        assert!(vault::accounted_assets(&v) == 999_000, 2);
+
+        let (shares2, fee2, publisher2) = vault::deposit_with_publisher(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            @0x0,
+            0,
+            &mut ctx,
+        );
+        assert!(publisher2 == @0x0, 3);
+        assert!(coin::value(&fee2) == 0, 4);
+
+        coin::burn_for_testing(shares);
+        coin::burn_for_testing(fee);
+        coin::burn_for_testing(shares2);
+        coin::burn_for_testing(fee2);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test, expected_failure(abort_code = 10)]
+    fun deposit_with_publisher_rejects_fee_above_cap() {
+        let mut ctx = tx_context::dummy();
+        let mut v = vault::new_for_testing(&mut ctx);
+        let (shares, fee, _) = vault::deposit_with_publisher(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            @0xB,
+            11,
+            &mut ctx,
+        );
+        coin::burn_for_testing(shares);
+        coin::burn_for_testing(fee);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test]
     fun keeper_cap_processes_pending_deposits() {
         let mut ctx = tx_context::dummy();
         let mut v = vault::new_for_testing(&mut ctx);

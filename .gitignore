@@ -9,3 +9,4 @@ move/build/
 *.log
 .sui/
 deploy.json
+scripts/config.json

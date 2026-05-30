@@ -8,10 +8,12 @@
 /// are wired to `deepbook_predict` in the next step (after the gas benchmark confirms
 /// the per-PTB leg budget against the 5M computation-unit cap).
 module predict_studio::studio {
+    use std::bcs;
     use std::string::String;
     use sui::{
         clock::Clock,
         event,
+        hash,
         object::{Self, UID},
         transfer,
         tx_context::{Self, TxContext},
@@ -22,6 +24,9 @@ module predict_studio::studio {
     const ENotOwner: u64 = 3;
     const EAlreadySettled: u64 = 4;
     const EOracleNotSettled: u64 = 5;
+    const EFeeTooHigh: u64 = 6;
+
+    const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
     /// One leg of a structured payoff: a Predict binary or range position.
     /// `is_range` selects binary vs vertical range; strikes/direction are recorded
@@ -69,6 +74,13 @@ module predict_studio::studio {
         pnl_abs: u64,
     }
 
+    public struct PublisherFeePaid has copy, drop {
+        position_id: ID,
+        publisher: address,
+        fee_paid: u64,
+        fee_bps: u64,
+    }
+
     // --- Read-only getters (used by the TS engine / verifiable-analytics layer) ---
 
     public fun max_loss(self: &StructuredPosition): u64 { self.max_loss }
@@ -82,6 +94,17 @@ module predict_studio::studio {
         is_range: bool, is_up: bool, lower_strike: u64, higher_strike: u64, quantity: u64,
     ): Leg {
         Leg { is_range, is_up, lower_strike, higher_strike, quantity }
+    }
+
+    public fun structure_hash(shape: &String, legs: &vector<Leg>): vector<u8> {
+        let mut bytes = bcs::to_bytes(shape);
+        bytes.append(bcs::to_bytes(legs));
+        hash::blake2b256(&bytes)
+    }
+
+    public fun publisher_fee(premium_paid: u64, fee_bps: u64): u64 {
+        assert!(fee_bps <= MAX_PUBLISHER_FEE_BPS, EFeeTooHigh);
+        premium_paid * fee_bps / 10_000
     }
 
     /// Atomically mint every leg of a structure, enforce the worst-case-loss
@@ -174,6 +197,44 @@ module predict_studio::studio {
             ctx,
         );
         transfer::public_transfer(pos, tx_context::sender(ctx));
+    }
+
+    public fun build_and_mint_with_publisher<Quote>(
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        shape: String,
+        legs: vector<Leg>,
+        max_loss_budget: u64,
+        publisher: address,
+        fee_bps: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): StructuredPosition {
+        let mut pos = build_and_mint<Quote>(
+            predict,
+            manager,
+            oracle,
+            shape,
+            legs,
+            max_loss_budget,
+            clock,
+            ctx,
+        );
+        let fee = publisher_fee(pos.premium_paid, fee_bps);
+        if (fee > 0) {
+            assert!(pos.premium_paid + fee <= max_loss_budget, EMaxLossExceeded);
+            let fee_coin = manager.withdraw<Quote>(fee, ctx);
+            transfer::public_transfer(fee_coin, publisher);
+            pos.max_loss = pos.premium_paid + fee;
+            event::emit(PublisherFeePaid {
+                position_id: object::id(&pos),
+                publisher,
+                fee_paid: fee,
+                fee_bps,
+            });
+        };
+        pos
     }
 
     public fun settle<Quote>(

@@ -2,9 +2,25 @@ import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
 import type { SuiObjectData } from '@mysten/sui/jsonRpc';
 import { getOracles, type IndexerOracle } from './indexer';
+import type { RfqQuote } from './rfq';
 import { FLOAT, type Leg, type OracleState, type SVI } from './types';
 
 type MoveObjectFields = Record<string, unknown>;
+type MoveObjectLike = { objectId?: string; content?: { dataType?: string; fields?: MoveObjectFields } };
+
+export interface StructuredPositionSummary {
+  objectId: string;
+  owner?: string;
+  managerId?: string;
+  oracleId?: string;
+  expiryMs: number;
+  shape: string;
+  legs: Leg[];
+  premiumPaid: number;
+  maxLoss: number;
+  maxGain: number;
+  settled: boolean;
+}
 
 export function decodeU64LE(bytes: number[] | Uint8Array): number {
   const arr = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
@@ -23,6 +39,62 @@ function numeric(value: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') return Number(value);
   throw new Error(`Expected numeric field, got ${typeof value}`);
+}
+
+function optionalNumeric(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  return numeric(value);
+}
+
+function idString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  const fields = (value as { fields?: { id?: string; bytes?: string } } | undefined)?.fields;
+  return fields?.id ?? fields?.bytes;
+}
+
+function moveString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  const fields = (value as { fields?: { bytes?: unknown } } | undefined)?.fields;
+  const bytes = fields?.bytes;
+  if (Array.isArray(bytes)) return new TextDecoder().decode(Uint8Array.from(bytes.map(Number)));
+  if (typeof bytes === 'string') return bytes;
+  return String(value ?? '');
+}
+
+function legFromFields(value: unknown): Leg {
+  const fields = (value as { fields?: MoveObjectFields } | undefined)?.fields ?? (value as MoveObjectFields);
+  return {
+    isRange: Boolean(fields.is_range),
+    isUp: Boolean(fields.is_up),
+    lowerStrike: numeric(fields.lower_strike),
+    higherStrike: numeric(fields.higher_strike),
+    quantity: numeric(fields.quantity),
+  };
+}
+
+export function structuredPositionFromObject(data: MoveObjectLike): StructuredPositionSummary | undefined {
+  if (!data.objectId || data.content?.dataType !== 'moveObject' || !data.content.fields) return undefined;
+  const fields = data.content.fields;
+  const expiryMs = optionalNumeric(fields.expiry_ms);
+  const premiumPaid = optionalNumeric(fields.premium_paid);
+  const maxLoss = optionalNumeric(fields.max_loss);
+  const maxGain = optionalNumeric(fields.max_gain);
+  if (expiryMs === undefined || premiumPaid === undefined || maxLoss === undefined || maxGain === undefined) return undefined;
+
+  const legs = Array.isArray(fields.legs) ? fields.legs.map(legFromFields) : [];
+  return {
+    objectId: data.objectId,
+    owner: typeof fields.owner === 'string' ? fields.owner : undefined,
+    managerId: idString(fields.manager_id),
+    oracleId: idString(fields.oracle_id),
+    expiryMs,
+    shape: moveString(fields.shape),
+    legs,
+    premiumPaid,
+    maxLoss,
+    maxGain,
+    settled: Boolean(fields.settled),
+  };
 }
 
 function i64Float(value: unknown): number {
@@ -132,6 +204,22 @@ export class PredictClient {
     });
   }
 
+  private legVec(tx: Transaction, legs: Leg[]) {
+    const legStructs = legs.map((leg) =>
+      tx.moveCall({
+        target: `${this.pkg}::studio::new_leg`,
+        arguments: [
+          tx.pure.bool(leg.isRange),
+          tx.pure.bool(leg.isUp),
+          tx.pure.u64(leg.lowerStrike),
+          tx.pure.u64(leg.higherStrike),
+          tx.pure.u64(leg.quantity),
+        ],
+      }),
+    );
+    return tx.makeMoveVec({ type: `${this.pkg}::studio::Leg`, elements: legStructs });
+  }
+
   async quoteLegPair(oracle: OracleState, leg: Leg, sender: string): Promise<{ ask: number; bid: number }> {
     const tx = new Transaction();
     const key = this.legKeyCall(tx, oracle, leg);
@@ -163,19 +251,7 @@ export class PredictClient {
     if (!oracle.managerId) throw new Error('Missing PredictManager id');
     if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
     const tx = new Transaction();
-    const legStructs = legs.map((leg) =>
-      tx.moveCall({
-        target: `${this.pkg}::studio::new_leg`,
-        arguments: [
-          tx.pure.bool(leg.isRange),
-          tx.pure.bool(leg.isUp),
-          tx.pure.u64(leg.lowerStrike),
-          tx.pure.u64(leg.higherStrike),
-          tx.pure.u64(leg.quantity),
-        ],
-      }),
-    );
-    const legVec = tx.makeMoveVec({ type: `${this.pkg}::studio::Leg`, elements: legStructs });
+    const legVec = this.legVec(tx, legs);
 
     tx.moveCall({
       target: `${this.pkg}::studio::build_and_mint_to_sender`,
@@ -187,6 +263,49 @@ export class PredictClient {
         tx.pure.string(shape),
         legVec,
         tx.pure.u64(maxLossBudget),
+        tx.object('0x6'),
+      ],
+    });
+    return tx;
+  }
+
+  buildFillQuoteTx(
+    oracle: OracleState,
+    rfqBookId: string,
+    legs: Leg[],
+    shape: string,
+    quote: RfqQuote,
+    publicKey: Uint8Array | number[],
+    signature: Uint8Array | number[],
+  ): Transaction {
+    if (!oracle.managerId) throw new Error('Missing PredictManager id');
+    if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
+    const tx = new Transaction();
+    const legVec = this.legVec(tx, legs);
+    const quoteArg = tx.moveCall({
+      target: `${this.pkg}::rfq::new_quote`,
+      arguments: [
+        tx.pure.vector('u8', Array.from(quote.structureHash)),
+        tx.pure.u64(quote.premium),
+        tx.pure.address(quote.maker),
+        tx.pure.u64(quote.expiryMs),
+        tx.pure.u64(quote.nonce),
+      ],
+    });
+
+    tx.moveCall({
+      target: `${this.pkg}::rfq::fill_quote`,
+      typeArguments: [oracle.dusdcType],
+      arguments: [
+        tx.object(rfqBookId),
+        tx.object(oracle.predictId),
+        tx.object(oracle.managerId),
+        tx.object(oracle.oracleId),
+        tx.pure.string(shape),
+        legVec,
+        quoteArg,
+        tx.pure.vector('u8', Array.from(publicKey)),
+        tx.pure.vector('u8', Array.from(signature)),
         tx.object('0x6'),
       ],
     });
@@ -211,15 +330,15 @@ export class PredictClient {
     return tx;
   }
 
-  async listPositions(owner: string): Promise<Array<{ objectId?: string }>> {
+  async listPositions(owner: string): Promise<StructuredPositionSummary[]> {
     const res = await this.client.getOwnedObjects({
       owner,
       filter: { StructType: `${this.pkg}::studio::StructuredPosition` },
       options: { showContent: true },
     });
     return res.data.flatMap((item) => {
-      const data = item.data as { objectId?: string } | null | undefined;
-      return data ? [data] : [];
+      const position = structuredPositionFromObject(item.data as MoveObjectLike);
+      return position ? [position] : [];
     });
   }
 }

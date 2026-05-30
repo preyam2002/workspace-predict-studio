@@ -3,6 +3,10 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
+if (!existsSync('./scripts/config.json')) {
+  throw new Error('Missing scripts/config.json. Run `pnpm verify:first -- --write-config`, then fill dusdcType/dusdcCoinId if you want setup to fund the manager.');
+}
+
 const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
   dbp: string;
   dusdcType?: string;
@@ -53,4 +57,5 @@ if (cfg.dusdcType && cfg.dusdcCoinId) {
 
 const deploy = existsSync('./deploy.json') ? JSON.parse(readFileSync('./deploy.json', 'utf8')) : {};
 writeFileSync('./deploy.json', JSON.stringify({ ...deploy, managerId }, null, 2));
+writeFileSync('./scripts/config.json', `${JSON.stringify({ ...cfg, managerId, sender: keypair.getPublicKey().toSuiAddress() }, null, 2)}\n`);
 console.log('manager:', managerId);

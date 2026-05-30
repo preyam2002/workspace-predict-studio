@@ -1,0 +1,390 @@
+{
+  "oracle": {
+    "predictId": "fixture",
+    "oracleId": "fixture",
+    "dbpPackage": "fixture",
+    "dusdcType": "fixture",
+    "expiryMs": 86400000,
+    "nowMs": 0,
+    "spot": 100,
+    "forward": 100,
+    "status": "active",
+    "underlyingAsset": "BTC",
+    "svi": {
+      "a": 0.04,
+      "b": 0.1,
+      "rho": -0.3,
+      "m": 0,
+      "sigma": 0.2
+    },
+    "minStrike": 70,
+    "tickSize": 5,
+    "maxStrike": 130
+  },
+  "vaults": [
+    {
+      "id": "capped_bull_note",
+      "name": "Capped Bull Note",
+      "strategy": "capped_bull_note",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 23.4656,
+      "premiumUsd": 0.451262,
+      "maxPayoutUsd": 1,
+      "legCount": 1,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 100,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "capped_bear_note",
+      "name": "Capped Bear Note",
+      "strategy": "capped_bear_note",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 28.5344,
+      "premiumUsd": 0.548738,
+      "maxPayoutUsd": 1,
+      "legCount": 1,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": false,
+          "lowerStrike": 100,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "digital_call_note",
+      "name": "Digital Call Note",
+      "strategy": "digital_call_note",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 19.4292,
+      "premiumUsd": 0.373638,
+      "maxPayoutUsd": 1,
+      "legCount": 1,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 105,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "digital_put_note",
+      "name": "Digital Put Note",
+      "strategy": "digital_put_note",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 24.3214,
+      "premiumUsd": 0.467719,
+      "maxPayoutUsd": 1,
+      "legCount": 1,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": false,
+          "lowerStrike": 95,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "iron_condor_income",
+      "name": "Iron Condor Income",
+      "strategy": "iron_condor_income",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 15.982,
+      "premiumUsd": 0.307346,
+      "maxPayoutUsd": 1,
+      "legCount": 1,
+      "legs": [
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 90,
+          "higherStrike": 110,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "twin_win",
+      "name": "Twin-Win",
+      "strategy": "twin_win",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 29.1465,
+      "premiumUsd": 0.560509,
+      "maxPayoutUsd": 1,
+      "legCount": 2,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": false,
+          "lowerStrike": 85,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 115,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "shark_fin",
+      "name": "Shark-Fin",
+      "strategy": "shark_fin",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 25.5898,
+      "premiumUsd": 0.492111,
+      "maxPayoutUsd": 1,
+      "legCount": 4,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 95,
+          "higherStrike": 0,
+          "quantity": 500000,
+          "quantityUsd": 0.5
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 90,
+          "higherStrike": 95,
+          "quantity": 250000,
+          "quantityUsd": 0.25
+        },
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 105,
+          "higherStrike": 0,
+          "quantity": 500000,
+          "quantityUsd": 0.5
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 100,
+          "higherStrike": 105,
+          "quantity": 250000,
+          "quantityUsd": 0.25
+        }
+      ]
+    },
+    {
+      "id": "fixed_coupon_range",
+      "name": "Fixed-Coupon Range Note",
+      "strategy": "fixed_coupon_range",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 29.5737,
+      "premiumUsd": 0.568725,
+      "maxPayoutUsd": 1.25,
+      "legCount": 3,
+      "legs": [
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 90,
+          "higherStrike": 110,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 70,
+          "higherStrike": 0,
+          "quantity": 250000,
+          "quantityUsd": 0.25
+        },
+        {
+          "isRange": false,
+          "isUp": false,
+          "lowerStrike": 75,
+          "higherStrike": 0,
+          "quantity": 250000,
+          "quantityUsd": 0.25
+        }
+      ]
+    },
+    {
+      "id": "digital_ladder",
+      "name": "Digital Ladder",
+      "strategy": "digital_ladder",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 35.5276,
+      "premiumUsd": 0.683223,
+      "maxPayoutUsd": 1.5,
+      "legCount": 3,
+      "legs": [
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 100,
+          "higherStrike": 0,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 90,
+          "higherStrike": 100,
+          "quantity": 500000,
+          "quantityUsd": 0.5
+        },
+        {
+          "isRange": false,
+          "isUp": true,
+          "lowerStrike": 110,
+          "higherStrike": 0,
+          "quantity": 500000,
+          "quantityUsd": 0.5
+        }
+      ]
+    },
+    {
+      "id": "barrier_box",
+      "name": "Barrier Box",
+      "strategy": "barrier_box",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 36.9808,
+      "premiumUsd": 0.71117,
+      "maxPayoutUsd": 2,
+      "legCount": 3,
+      "legs": [
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 80,
+          "higherStrike": 110,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 110,
+          "higherStrike": 120,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 95,
+          "higherStrike": 105,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    },
+    {
+      "id": "butterfly_pin",
+      "name": "Butterfly Pin",
+      "strategy": "butterfly_pin",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 12.109,
+      "premiumUsd": 0.232866,
+      "maxPayoutUsd": 1,
+      "legCount": 4,
+      "legs": [
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 90,
+          "higherStrike": 105,
+          "quantity": 666667,
+          "quantityUsd": 0.666667
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 85,
+          "higherStrike": 90,
+          "quantity": 333333,
+          "quantityUsd": 0.333333
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 105,
+          "higherStrike": 110,
+          "quantity": 333333,
+          "quantityUsd": 0.333333
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 95,
+          "higherStrike": 100,
+          "quantity": 333333,
+          "quantityUsd": 0.333333
+        }
+      ]
+    },
+    {
+      "id": "dual_range_barbell",
+      "name": "Dual-Range Barbell",
+      "strategy": "dual_range_barbell",
+      "underlyingAsset": "BTC",
+      "nav": 1,
+      "apr": 10.7782,
+      "premiumUsd": 0.207273,
+      "maxPayoutUsd": 1,
+      "legCount": 2,
+      "legs": [
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 75,
+          "higherStrike": 85,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        },
+        {
+          "isRange": true,
+          "isUp": false,
+          "lowerStrike": 115,
+          "higherStrike": 125,
+          "quantity": 1000000,
+          "quantityUsd": 1
+        }
+      ]
+    }
+  ]
+}

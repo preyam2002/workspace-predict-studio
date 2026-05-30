@@ -1,4 +1,5 @@
-import { priceSolution, solveSparse } from './solver';
+import { priceSolution, solveCertifiedSparse } from './solver';
+import { defaultImpactParams, fairFromSvi, optimalOrder, priceBasketSequential, splitAcrossCandidates, type AmmState, type ImpactParams } from './impact';
 import { MAX_LEGS_PER_PTB, type Decomposition, type Leg, type OracleState, type PricedDecomp, type SparseTarget, type SVI } from './types';
 
 export type QuoteLeg = (leg: Leg) => Promise<number>;
@@ -58,8 +59,45 @@ export async function optimize(
 
 export function optimizeSparse(target: SparseTarget, svi: SVI, forward: number) {
   const candidates = [4, 6, 8].map((maxLegs) =>
-    priceSolution(solveSparse(target, { maxLegs, tol: 0.005 }), svi, forward),
+    priceSolution(solveCertifiedSparse(target, { maxLegs, tol: 0.005 }).solution, svi, forward),
   );
   candidates.sort((a, b) => a.premiumEst - b.premiumEst || a.legCount - b.legCount);
   return { best: candidates[0], all: candidates };
+}
+
+export function optimizeBasket(
+  legs: Leg[],
+  svi: SVI,
+  forward: number,
+  state: AmmState,
+  params: ImpactParams = defaultImpactParams,
+) {
+  const fairOf = fairFromSvi(svi, forward);
+  const order = optimalOrder(legs, state, (leg) => fairOf(leg), params);
+  const orderedLegs = order.order.map((index) => legs[index]);
+  const priced = priceBasketSequential(orderedLegs, state, (leg) => fairOf(leg), params);
+  const splitLegs = orderedLegs.flatMap((leg) => {
+    if (!leg.isRange && leg.quantity > 5_000_000) {
+      return splitAcrossCandidates(
+        leg,
+        [
+          { leg: { ...leg, lowerStrike: leg.lowerStrike - Math.max(1, Math.round(leg.lowerStrike * 0.01)) }, fairPrice: Math.max(0, fairOf(leg) * 0.98) },
+          { leg, fairPrice: fairOf(leg) },
+          { leg: { ...leg, lowerStrike: leg.lowerStrike + Math.max(1, Math.round(leg.lowerStrike * 0.01)) }, fairPrice: Math.min(1, fairOf(leg) * 1.02) },
+        ],
+        state,
+        params,
+      ).legs;
+    }
+    return [leg];
+  });
+  const exposure = legs.reduce((sum, leg) => sum + fairOf(leg) * leg.quantity, state.mtm);
+
+  return {
+    order: order.order,
+    legs: splitLegs,
+    totalCost: priced.sequential,
+    impactCost: priced.impactCost,
+    exposureOk: exposure <= (params.maxExposurePct ?? 0.8) * state.balance,
+  };
 }

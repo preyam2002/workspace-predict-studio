@@ -1,3 +1,5 @@
+import { rankPublishers, type PublisherRank } from './creator';
+
 export const PREDICT_INDEXER_BASE = 'https://predict-server.testnet.mystenlabs.com';
 
 export interface IndexerOracle {
@@ -45,4 +47,77 @@ export async function getSettledHistory(asset = 'BTC') {
   return oracles
     .filter((oracle) => oracle.underlying_asset === asset && oracle.status === 'settled' && oracle.settlement_price)
     .map((oracle) => ({ settlementPrice: Number(oracle.settlement_price), expiryMs: Number(oracle.expiry) }));
+}
+
+type EventLike = Record<string, unknown> & { parsedJson?: unknown };
+
+interface EventClient {
+  queryEvents(args: {
+    query: { MoveEventType: string };
+    limit?: number;
+    order?: 'ascending' | 'descending';
+  }): Promise<{ data: EventLike[] }>;
+}
+
+function eventFields(event: EventLike): Record<string, unknown> {
+  return typeof event.parsedJson === 'object' && event.parsedJson !== null
+    ? (event.parsedJson as Record<string, unknown>)
+    : event;
+}
+
+function numberField(fields: Record<string, unknown>, key: string): number | undefined {
+  const value = fields[key];
+  if (value === undefined || value === null) return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+export function publisherLeaderboardFromEvents(events: EventLike[]): PublisherRank[] {
+  return rankPublishers(
+    events.flatMap((event) => {
+      const fields = eventFields(event);
+      const publisher = typeof fields.publisher === 'string' ? fields.publisher : undefined;
+      if (!publisher || publisher === '0x0') return [];
+
+      const feePaid = numberField(fields, 'fee_paid');
+      const feeBps = numberField(fields, 'fee_bps');
+      const volume =
+        numberField(fields, 'volume') ??
+        numberField(fields, 'premium_paid') ??
+        (feePaid !== undefined && feeBps ? Math.floor((feePaid * 10_000) / feeBps) : undefined);
+      if (volume === undefined) return [];
+
+      return [
+        {
+          publisher,
+          volume,
+          realizedPayout: numberField(fields, 'realized_payout') ?? numberField(fields, 'payout') ?? 0,
+        },
+      ];
+    }),
+  );
+}
+
+export async function getPublisherLeaderboard(
+  client: EventClient,
+  studioPackage: string,
+  limit = 50,
+): Promise<PublisherRank[]> {
+  const eventTypes = [
+    `${studioPackage}::studio::PublisherFeePaid`,
+    `${studioPackage}::vault::PublisherFeePaid`,
+    `${studioPackage}::note_kiosk::RoyaltyPaid`,
+  ];
+  const results = await Promise.allSettled(
+    eventTypes.map((eventType) =>
+      client.queryEvents({
+        query: { MoveEventType: eventType },
+        limit,
+        order: 'descending',
+      }),
+    ),
+  );
+  return publisherLeaderboardFromEvents(
+    results.flatMap((result) => (result.status === 'fulfilled' ? result.value.data : [])),
+  );
 }

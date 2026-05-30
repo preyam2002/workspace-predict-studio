@@ -1,6 +1,10 @@
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+
+if (!existsSync('./scripts/config.json')) {
+  throw new Error('Missing scripts/config.json. Run `pnpm verify:first -- --write-config`, then fill managerId, dusdcType, dusdcCoinId, and sender.');
+}
 
 const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
   dbp: string;
@@ -15,7 +19,9 @@ const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
 };
 
 for (const key of ['dbp', 'predictId', 'managerId', 'oracleId', 'dusdcType', 'sender', 'expiry', 'minStrike', 'tickSize'] as const) {
-  if (!cfg[key]) throw new Error(`scripts/config.json is missing ${key}`);
+  if (!cfg[key] || String(cfg[key]).startsWith('replace-')) {
+    throw new Error(`scripts/config.json is missing ${key}. Run \`pnpm verify:first -- --write-config\` and \`pnpm setup\` first.`);
+  }
 }
 
 const client = new SuiJsonRpcClient({ url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });

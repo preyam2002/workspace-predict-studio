@@ -15,6 +15,18 @@ export interface SolveOpts {
   maxMacroWidth?: number;
 }
 
+export interface ExactSolveOpts extends SolveOpts {
+  maxSupports?: number;
+  coherencePrune?: number;
+}
+
+export interface GapCertificate {
+  coherence: number;
+  exactRecovery: boolean;
+  gapBound: number;
+  escalate: boolean;
+}
+
 function payoffVector(leg: Leg, strikes: number[]): Float64Array {
   return Float64Array.from(strikes.map((s) => (legPays(leg, s) ? 1 : 0)));
 }
@@ -27,6 +39,49 @@ function weightedRms(residual: Float64Array, w: Float64Array): number {
     den += w[t] * w[t];
   }
   return Math.sqrt(err / Math.max(den, 1));
+}
+
+function weightsFor(n: number, weights?: number[]): Float64Array {
+  return Float64Array.from(weights ?? new Array(n).fill(1)).map((v) => Math.sqrt(v));
+}
+
+function solutionFromSupport(
+  target: SparseTarget,
+  dict: Atom[],
+  selected: number[],
+  coef: ArrayLike<number>,
+  w: Float64Array,
+): SparseSolution {
+  const legs = selected
+    .map((j, r) => ({ ...dict[j].leg, quantity: Math.round(coef[r] * USDC) }))
+    .filter((leg) => leg.quantity > 0);
+  const residual = Float64Array.from(target.g);
+  for (const leg of legs) {
+    const qty = leg.quantity / USDC;
+    const payoff = payoffVector(leg, target.gridStrikes);
+    for (let t = 0; t < target.gridStrikes.length; t += 1) residual[t] -= qty * payoff[t];
+  }
+
+  let maxAbsError = 0;
+  for (const v of residual) maxAbsError = Math.max(maxAbsError, Math.abs(v));
+
+  return {
+    legs,
+    l2Error: weightedRms(residual, w),
+    maxAbsError,
+    premiumEst: 0,
+    legCount: legs.length,
+  };
+}
+
+function betterSolution(candidate: SparseSolution, best: SparseSolution): boolean {
+  return (
+    candidate.l2Error < best.l2Error - 1e-12 ||
+    (Math.abs(candidate.l2Error - best.l2Error) <= 1e-12 && candidate.legCount < best.legCount) ||
+    (Math.abs(candidate.l2Error - best.l2Error) <= 1e-12 &&
+      candidate.legCount === best.legCount &&
+      candidate.maxAbsError < best.maxAbsError)
+  );
 }
 
 /**
@@ -98,7 +153,7 @@ export function solveSparse(target: SparseTarget, opts: SolveOpts): SparseSoluti
   if (g.some((v) => v < -1e-9)) throw new Error('target must be non-negative (long-only constraint)');
 
   const n = strikes.length;
-  const w = Float64Array.from(opts.weights ?? new Array(n).fill(1)).map((v) => Math.sqrt(v));
+  const w = weightsFor(n, opts.weights);
   const coefFloor = opts.coefFloor ?? 1e-4;
   const dict = buildDictionary(strikes, opts.maxMacroWidth);
   const colNorm = dict.map((a) => {
@@ -153,29 +208,122 @@ export function solveSparse(target: SparseTarget, opts: SolveOpts): SparseSoluti
     if (weightedRms(residual, w) <= opts.tol) break;
   }
 
-  const legs = selected
-    .map((j, r) => ({ ...dict[j].leg, quantity: Math.round(coef[r] * USDC) }))
-    .filter((leg) => leg.quantity > 0);
-  const roundedResidual = Float64Array.from(g);
-  for (const leg of legs) {
-    const qty = leg.quantity / USDC;
-    const payoff = payoffVector(leg, strikes);
-    for (let t = 0; t < n; t += 1) roundedResidual[t] -= qty * payoff[t];
-  }
-
-  let maxAbsError = 0;
-  for (const v of roundedResidual) maxAbsError = Math.max(maxAbsError, Math.abs(v));
-
-  return {
-    legs,
-    l2Error: weightedRms(roundedResidual, w),
-    maxAbsError,
-    premiumEst: 0,
-    legCount: legs.length,
-  };
+  return solutionFromSupport(target, dict, selected, coef, w);
 }
 
 export function priceSolution(sol: SparseSolution, svi: SVI, forward: number): SparseSolution {
   const premiumEst = sol.legs.reduce((sum, leg) => sum + legProb(svi, forward, leg) * (leg.quantity / USDC), 0);
   return { ...sol, premiumEst };
+}
+
+function normalizedDot(a: Float64Array, b: Float64Array): number {
+  let dot = 0;
+  let aa = 0;
+  let bb = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i] * b[i];
+    aa += a[i] * a[i];
+    bb += b[i] * b[i];
+  }
+  return aa === 0 || bb === 0 ? 0 : Math.abs(dot / Math.sqrt(aa * bb));
+}
+
+function pruneByCoherence(dict: Atom[], threshold: number): Atom[] {
+  const out: Atom[] = [];
+  for (const atom of dict) {
+    if (!out.some((kept) => normalizedDot(atom.payoff, kept.payoff) > threshold)) out.push(atom);
+  }
+  return out;
+}
+
+function cappedCombinationCount(n: number, b: number, cap: number): number {
+  let total = 1;
+  let c = 1;
+  for (let k = 1; k <= Math.min(n, b); k += 1) {
+    c = (c * (n - k + 1)) / k;
+    total += c;
+    if (total > cap) return total;
+  }
+  return total;
+}
+
+export function solveExact(target: SparseTarget, opts: ExactSolveOpts): SparseSolution {
+  if (target.g.some((v) => v < -1e-9)) throw new Error('target must be non-negative (long-only constraint)');
+  const w = weightsFor(target.gridStrikes.length, opts.weights);
+  const maxSupports = opts.maxSupports ?? 200_000;
+  const dict = pruneByCoherence(buildDictionary(target.gridStrikes, opts.maxMacroWidth), opts.coherencePrune ?? 0.999999);
+  const supportCount = cappedCombinationCount(dict.length, opts.maxLegs, maxSupports);
+  if (supportCount > maxSupports) {
+    throw new Error(`exact sparse solve support budget exceeded: ${supportCount} > ${maxSupports}`);
+  }
+
+  let best = solutionFromSupport(target, dict, [], [], w);
+  const support: number[] = [];
+  const target64 = Float64Array.from(target.g);
+
+  const visit = (start: number) => {
+    if (support.length > 0) {
+      const x = nnls(
+        support.map((j) => dict[j].payoff),
+        target64,
+        w,
+      );
+      const candidate = solutionFromSupport(target, dict, support, x, w);
+      if (betterSolution(candidate, best)) best = candidate;
+    }
+    if (support.length >= opts.maxLegs) return;
+
+    for (let j = start; j < dict.length; j += 1) {
+      support.push(j);
+      visit(j + 1);
+      support.pop();
+    }
+  };
+
+  visit(0);
+  return best;
+}
+
+export function solveBranchAndBound(target: SparseTarget, opts: ExactSolveOpts & { maxNodes?: number }): SparseSolution {
+  const greedy = solveSparse(target, opts);
+  try {
+    const exact = solveExact(target, { ...opts, maxSupports: opts.maxNodes ?? opts.maxSupports ?? 500_000 });
+    return betterSolution(exact, greedy) ? exact : greedy;
+  } catch {
+    return greedy;
+  }
+}
+
+export function mutualCoherence(strikes: number[], maxMacroWidth?: number): number {
+  const dict = buildDictionary(strikes, maxMacroWidth);
+  let mu = 0;
+  for (let i = 0; i < dict.length; i += 1) {
+    for (let j = i + 1; j < dict.length; j += 1) {
+      mu = Math.max(mu, normalizedDot(dict[i].payoff, dict[j].payoff));
+    }
+  }
+  return mu;
+}
+
+export function certifyGap(target: SparseTarget, maxLegs: number, opts: Pick<SolveOpts, 'maxMacroWidth'> = {}): GapCertificate {
+  const coherence = mutualCoherence(target.gridStrikes, opts.maxMacroWidth);
+  const threshold = 1 / Math.max(1, 2 * maxLegs - 1);
+  const exactRecovery = coherence < threshold;
+  const denom = 1 - Math.max(0, (maxLegs - 1) * coherence);
+  const gapBound = exactRecovery ? 0 : denom > 0 ? coherence / denom : Number.POSITIVE_INFINITY;
+  return { coherence, exactRecovery, gapBound, escalate: !exactRecovery };
+}
+
+export function solveCertifiedSparse(target: SparseTarget, opts: ExactSolveOpts): { solution: SparseSolution; certificate: GapCertificate } {
+  const greedy = solveSparse(target, opts);
+  const certificate = certifyGap(target, opts.maxLegs, opts);
+  if (!certificate.escalate) return { solution: greedy, certificate };
+
+  const maxSupports = opts.maxSupports ?? 100_000;
+  try {
+    const exact = solveExact(target, { ...opts, maxSupports });
+    return { solution: betterSolution(exact, greedy) ? exact : greedy, certificate };
+  } catch {
+    return { solution: greedy, certificate };
+  }
 }
