@@ -55,6 +55,26 @@ describe('VaultClient', () => {
     expect(data.commands[1].TransferObjects).toBeDefined();
   });
 
+  it('builds an escrow-backed strategy roll transaction', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildRollIntoStrategyTx({
+      vaultId: ids.vaultId,
+      managerEscrowId: '0x5',
+      quoteType: ids.quoteType,
+      predictId: '0x6',
+      managerId: '0x7',
+      oracleId: '0x8',
+      shape: 'digital_call',
+      legs: [{ isRange: false, isUp: true, lowerStrike: 70_000, higherStrike: 0, quantity: 1_000_000 }],
+      maxLossBudget: 500_000,
+    });
+
+    const rollCall = tx.getData().commands.at(-1)?.MoveCall;
+    expect(rollCall?.module).toBe('vault');
+    expect(rollCall?.function).toBe('roll_into_strategy');
+    expect(rollCall?.typeArguments).toEqual([ids.quoteType]);
+  });
+
   it('reads NAV from a devInspect u64 return value', async () => {
     const client = new VaultClient(
       {

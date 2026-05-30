@@ -1,6 +1,7 @@
 import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
 import { decodeU64LE } from './predict-client';
+import type { Leg } from './types';
 
 export interface VaultIds {
   vaultId: string;
@@ -27,11 +28,39 @@ export interface CreateVaultWithManagerEscrowParams {
   strategy: string;
 }
 
+export interface RollIntoStrategyParams {
+  vaultId: string;
+  managerEscrowId: string;
+  quoteType: string;
+  predictId: string;
+  managerId: string;
+  oracleId: string;
+  shape: string;
+  legs: Leg[];
+  maxLossBudget: number;
+}
+
 export class VaultClient {
   constructor(
     private readonly client: SuiJsonRpcClient,
     private readonly pkg: string,
   ) {}
+
+  private legVec(tx: Transaction, legs: Leg[]) {
+    const legStructs = legs.map((leg) =>
+      tx.moveCall({
+        target: `${this.pkg}::studio::new_leg`,
+        arguments: [
+          tx.pure.bool(leg.isRange),
+          tx.pure.bool(leg.isUp),
+          tx.pure.u64(leg.lowerStrike),
+          tx.pure.u64(leg.higherStrike),
+          tx.pure.u64(leg.quantity),
+        ],
+      }),
+    );
+    return tx.makeMoveVec({ type: `${this.pkg}::studio::Leg`, elements: legStructs });
+  }
 
   buildDepositTx(ids: VaultIds, coinId: string): Transaction {
     const tx = new Transaction();
@@ -128,6 +157,27 @@ export class VaultClient {
       ],
     });
     tx.transferObjects([escrow], tx.pure.address(params.recipient));
+    return tx;
+  }
+
+  buildRollIntoStrategyTx(params: RollIntoStrategyParams): Transaction {
+    const tx = new Transaction();
+    const legs = this.legVec(tx, params.legs);
+    tx.moveCall({
+      target: `${this.pkg}::vault::roll_into_strategy`,
+      typeArguments: [params.quoteType],
+      arguments: [
+        tx.object(params.vaultId),
+        tx.object(params.managerEscrowId),
+        tx.object(params.predictId),
+        tx.object(params.managerId),
+        tx.object(params.oracleId),
+        tx.pure.string(params.shape),
+        legs,
+        tx.pure.u64(params.maxLossBudget),
+        tx.object('0x6'),
+      ],
+    });
     return tx;
   }
 

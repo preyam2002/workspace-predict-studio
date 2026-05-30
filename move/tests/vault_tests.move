@@ -1,5 +1,6 @@
 #[test_only]
 module predict_studio::vault_tests {
+    use predict_studio::studio;
     use predict_studio::vault;
     use deepbook_predict::{predict, predict_manager::PredictManager};
     use std::string;
@@ -303,6 +304,73 @@ module predict_studio::vault_tests {
             assert!(vault::escrow_owner(&escrow) == admin, 2);
 
             vault::assert_escrowed_manager(&v, &escrow, &manager, scenario.ctx());
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
+    #[test]
+    fun vault_records_escrowed_strategy_position() {
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(admin);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut v = vault::new_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            let position = studio::new_for_testing(
+                manager_id,
+                object::id(&v),
+                string::utf8(b"test_strategy"),
+                vector[studio::new_leg(false, true, 70_000, 0, 1_000_000)],
+                123_000,
+                scenario.ctx(),
+            );
+
+            vault::record_open_position(&mut v, &escrow, &manager, position, scenario.ctx());
+
+            assert!(vault::strategy_is_open(&v), 0);
+            assert!(vault::open_premium_paid(&v) == 123_000, 1);
+
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = 11)]
+    fun vault_rejects_strategy_position_from_wrong_manager() {
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(admin);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut v = vault::new_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            let position = studio::new_for_testing(
+                object::id(&v),
+                object::id(&v),
+                string::utf8(b"wrong_manager"),
+                vector[studio::new_leg(false, true, 70_000, 0, 1_000_000)],
+                123_000,
+                scenario.ctx(),
+            );
+
+            vault::record_open_position(&mut v, &escrow, &manager, position, scenario.ctx());
+
             vault::destroy_manager_escrow_for_testing(escrow);
             test_scenario::return_shared(manager);
             vault::destroy_for_testing(v);

@@ -1,8 +1,13 @@
 module predict_studio::vault {
     use predict_studio::studio_lp::{Self as studio_lp, ShareFactory, STUDIO_LP};
-    use std::string::{Self, String};
+    use predict_studio::studio::{Self as studio, Leg, StructuredPosition};
+    use std::{
+        option::{Self, Option},
+        string::{Self, String},
+    };
     use sui::{
         balance::{Self, Balance},
+        clock::Clock,
         coin::{Self, Coin, TreasuryCap},
         event,
         object::{Self, UID},
@@ -26,6 +31,7 @@ module predict_studio::vault {
     const EFeeTooHigh: u64 = 10;
     const EWrongManagerEscrow: u64 = 11;
     const EBadManagerOwner: u64 = 12;
+    const EStrategyAlreadyOpen: u64 = 13;
 
     const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
@@ -47,6 +53,7 @@ module predict_studio::vault {
         claim_assets: u64,
         claim_shares: u64,
         strategy_open: bool,
+        open: Option<StructuredPosition>,
         strategy: String,
     }
 
@@ -101,6 +108,18 @@ module predict_studio::vault {
     public fun hwm_pps_num<Q>(v: &StructuredVault<Q>): u128 { v.hwm_pps_num }
 
     public fun nav<Q>(v: &StructuredVault<Q>): u64 { v.accounted_assets }
+
+    public fun strategy_is_open<Q>(v: &StructuredVault<Q>): bool { v.strategy_open }
+
+    public fun has_open_position<Q>(v: &StructuredVault<Q>): bool { option::is_some(&v.open) }
+
+    public fun open_premium_paid<Q>(v: &StructuredVault<Q>): u64 {
+        if (option::is_some(&v.open)) {
+            studio::premium_paid(option::borrow(&v.open))
+        } else {
+            0
+        }
+    }
 
     public fun escrow_vault_id(escrow: &ManagerEscrow): ID { escrow.vault_id }
 
@@ -158,6 +177,7 @@ module predict_studio::vault {
             claim_assets: 0,
             claim_shares: 0,
             strategy_open: false,
+            open: option::none(),
             strategy,
         }
     }
@@ -389,6 +409,47 @@ module predict_studio::vault {
         assert!(manager.owner() == escrow.owner, EBadManagerOwner);
     }
 
+    public fun record_open_position<Q>(
+        v: &mut StructuredVault<Q>,
+        escrow: &ManagerEscrow,
+        manager: &deepbook_predict::predict_manager::PredictManager,
+        pos: StructuredPosition,
+        ctx: &TxContext,
+    ) {
+        assert_escrowed_manager(v, escrow, manager, ctx);
+        assert!(studio::owner(&pos) == escrow.owner, EBadManagerOwner);
+        assert!(studio::manager_id(&pos) == escrow.manager_id, EWrongManagerEscrow);
+        assert!(!option::is_some(&v.open), EStrategyAlreadyOpen);
+        option::fill(&mut v.open, pos);
+        v.strategy_open = true;
+    }
+
+    public fun roll_into_strategy<Q>(
+        v: &mut StructuredVault<Q>,
+        escrow: &ManagerEscrow,
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        shape: String,
+        legs: vector<Leg>,
+        max_loss_budget: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert_escrowed_manager(v, escrow, manager, ctx);
+        let pos = studio::build_and_mint<Q>(
+            predict,
+            manager,
+            oracle,
+            shape,
+            legs,
+            max_loss_budget,
+            clock,
+            ctx,
+        );
+        record_open_position(v, escrow, manager, pos, ctx);
+    }
+
     public fun keeper_roll<Q>(v: &mut StructuredVault<Q>, cap: &KeeperCap, budget: u64) {
         assert!(cap.vault_id == object::id(v), ENotKeeper);
         assert!(budget <= cap.max_budget, EBudgetTooHigh);
@@ -452,10 +513,16 @@ module predict_studio::vault {
             claim_assets: _,
             claim_shares: _,
             strategy_open: _,
+            open,
             strategy: _,
         } = v;
         balance::destroy_for_testing(idle);
         balance::destroy_for_testing(pending);
+        if (option::is_some(&open)) {
+            studio::destroy_for_testing(option::destroy_some(open));
+        } else {
+            option::destroy_none(open);
+        };
         std::unit_test::destroy(share_treasury);
         object::delete(id);
     }

@@ -4,9 +4,6 @@
 /// positions (which live as quantity rows inside a shared `PredictManager`) into a
 /// single owned object with a chain-enforced worst-case-loss envelope.
 ///
-/// Day-1 skeleton: object + events compile standalone. `build_and_mint` / `settle`
-/// are wired to `deepbook_predict` in the next step (after the gas benchmark confirms
-/// the per-PTB leg budget against the 5M computation-unit cap).
 module predict_studio::studio {
     use std::bcs;
     use std::string::String;
@@ -86,6 +83,9 @@ module predict_studio::studio {
     public fun max_loss(self: &StructuredPosition): u64 { self.max_loss }
     public fun max_gain(self: &StructuredPosition): u64 { self.max_gain }
     public fun premium_paid(self: &StructuredPosition): u64 { self.premium_paid }
+    public fun owner(self: &StructuredPosition): address { self.owner }
+    public fun manager_id(self: &StructuredPosition): ID { self.manager_id }
+    public fun oracle_id(self: &StructuredPosition): ID { self.oracle_id }
     public fun leg_count(self: &StructuredPosition): u64 { self.legs.length() }
     public fun is_settled(self: &StructuredPosition): bool { self.settled }
     public fun shape(self: &StructuredPosition): &String { &self.shape }
@@ -352,5 +352,48 @@ module predict_studio::studio {
 
     fun max_u64(a: u64, b: u64): u64 {
         if (a > b) a else b
+    }
+
+    #[test_only]
+    public fun new_for_testing(
+        manager_id: ID,
+        oracle_id: ID,
+        shape: String,
+        legs: vector<Leg>,
+        premium_paid: u64,
+        ctx: &mut TxContext,
+    ): StructuredPosition {
+        let max_gain = max_payout(&legs);
+        StructuredPosition {
+            id: object::new(ctx),
+            owner: tx_context::sender(ctx),
+            manager_id,
+            oracle_id,
+            expiry_ms: 0,
+            shape,
+            legs,
+            premium_paid,
+            max_loss: premium_paid,
+            max_gain,
+            settled: false,
+        }
+    }
+
+    #[test_only]
+    public fun destroy_for_testing(pos: StructuredPosition) {
+        let StructuredPosition {
+            id,
+            owner: _,
+            manager_id: _,
+            oracle_id: _,
+            expiry_ms: _,
+            shape: _,
+            legs: _,
+            premium_paid: _,
+            max_loss: _,
+            max_gain: _,
+            settled: _,
+        } = pos;
+        object::delete(id);
     }
 }

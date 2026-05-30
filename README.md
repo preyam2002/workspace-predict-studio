@@ -13,7 +13,7 @@ Predict Studio turns raw Predict binary/range instruments into trader-facing pay
   - `max_payout` computes best-case payout across strike breakpoints.
 - Vault, tranche, collateral, RFQ, and Kiosk note Move modules
   - `studio_lp.move` creates the real `STUDIO_LP` currency and publish-time share factory.
-  - `vault.move` consumes that factory to create/share a depositable vault, mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, capped publisher fees, and signer-owned PredictManager escrow binding.
+  - `vault.move` consumes that factory to create/share a depositable vault, mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, capped publisher fees, signer-owned PredictManager escrow binding, and an escrow-backed strategy roll path.
   - `pt_yt.move` splits vault shares into PT/YT and conserves redemption value through the maturity waterfall.
   - `studio_collateral.move` is an isolated dUSDC lending market against the provable floor of `Coin<STUDIO_LP>`.
   - `rfq.move` verifies Ed25519 signatures over canonical BCS quote bytes, binds quotes to the canonical structure hash, enforces TTL, prevents replay, and exposes an atomic `fill_quote` path.
@@ -95,6 +95,6 @@ pnpm dev
 
 ## Remaining Live Gates
 
-- Wire the next vault roll function through the signer-owned manager escrow path and validate it on testnet.
+- Validate the escrow-backed vault roll path on testnet with a funded manager.
 - Confirm Enoki sponsor app id/allowlist, Pyth BTC/USD object id, Cetus custom-pool creation, Walrus publisher endpoint, Kiosk marketplace flow against testnet, and any Suilend listing story.
 - Run `pnpm bench`, deploy, create/fund a manager, mint, settle, and record transaction digests once dUSDC and SUI are available.
