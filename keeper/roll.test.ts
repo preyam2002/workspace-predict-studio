@@ -77,4 +77,28 @@ describe('keeper roll planning', () => {
     );
     expect(wait.tx).toBeUndefined();
   });
+
+  it('builds a combined keeper roll and strategy re-entry PTB when manager escrow is configured', () => {
+    const roll = buildKeeperRollDryRun(
+      {
+        studioPackage,
+        vaultId,
+        keeperCapId,
+        quoteType: oracle.dusdcType,
+        budget: 1_000_000,
+        downsideDelta: 0.25,
+        upsideDelta: 0.25,
+        managerEscrowId: '0x00000000000000000000000000000000000000000000000000000000000000cc',
+        predictId: oracle.predictId,
+        managerId: '0x00000000000000000000000000000000000000000000000000000000000000dd',
+        quantity: 1_000_000,
+        maxLossBudget: 500_000,
+      },
+      oracle,
+    );
+
+    const functions = roll.tx?.getData().commands.flatMap((command) => command.MoveCall?.function ?? []);
+    expect(functions).toContain('keeper_roll');
+    expect(functions).toContain('roll_into_strategy');
+  });
 });

@@ -29,6 +29,12 @@ export interface KeeperConfig extends DeltaBand {
   keeperCapId: string;
   quoteType: string;
   budget: number;
+  managerEscrowId?: string;
+  predictId?: string;
+  managerId?: string;
+  quantity?: number;
+  maxLossBudget?: number;
+  shape?: string;
   oracleId?: string;
   sender?: string;
   dryRun?: boolean;
@@ -105,12 +111,46 @@ export function buildKeeperRollDryRun(config: KeeperConfig, oracle: OracleState)
 
   const studioPackage = config.studioPackage ?? process.env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE;
   if (!studioPackage) throw new Error('keeper config is missing studioPackage');
-  const tx = new VaultClient({} as never, studioPackage).buildKeeperRollTx(
-    config.vaultId,
-    config.quoteType,
-    config.keeperCapId,
-    config.budget,
-  );
+  const client = new VaultClient({} as never, studioPackage);
+  const wantsStrategy =
+    config.managerEscrowId !== undefined ||
+    config.predictId !== undefined ||
+    config.managerId !== undefined ||
+    config.quantity !== undefined ||
+    config.maxLossBudget !== undefined;
+  const hasStrategy =
+    config.managerEscrowId !== undefined &&
+    config.predictId !== undefined &&
+    config.managerId !== undefined &&
+    config.quantity !== undefined &&
+    config.maxLossBudget !== undefined;
+  if (wantsStrategy && !hasStrategy) {
+    throw new Error('keeper strategy roll requires managerEscrowId, predictId, managerId, quantity, and maxLossBudget');
+  }
+
+  const tx = hasStrategy
+    ? client.buildKeeperRollIntoStrategyTx({
+        vaultId: config.vaultId,
+        keeperCapId: config.keeperCapId,
+        quoteType: config.quoteType,
+        budget: config.budget,
+        managerEscrowId: config.managerEscrowId!,
+        predictId: config.predictId!,
+        managerId: config.managerId!,
+        oracleId: oracle.oracleId,
+        shape: config.shape ?? 'auto_range',
+        legs: [
+          {
+            isRange: true,
+            isUp: false,
+            lowerStrike: plan.lowerStrike,
+            higherStrike: plan.higherStrike,
+            quantity: config.quantity!,
+          },
+        ],
+        maxLossBudget: config.maxLossBudget!,
+      })
+    : client.buildKeeperRollTx(config.vaultId, config.quoteType, config.keeperCapId, config.budget);
   return { plan, tx };
 }
 

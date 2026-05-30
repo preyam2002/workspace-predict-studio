@@ -40,6 +40,11 @@ export interface RollIntoStrategyParams {
   maxLossBudget: number;
 }
 
+export interface KeeperRollIntoStrategyParams extends RollIntoStrategyParams {
+  keeperCapId: string;
+  budget: number;
+}
+
 export class VaultClient {
   constructor(
     private readonly client: SuiJsonRpcClient,
@@ -162,12 +167,29 @@ export class VaultClient {
 
   buildRollIntoStrategyTx(params: RollIntoStrategyParams): Transaction {
     const tx = new Transaction();
+    this.addRollIntoStrategy(tx, params);
+    return tx;
+  }
+
+  buildKeeperRollIntoStrategyTx(params: KeeperRollIntoStrategyParams): Transaction {
+    const tx = new Transaction();
+    const vault = tx.object(params.vaultId);
+    tx.moveCall({
+      target: `${this.pkg}::vault::keeper_roll`,
+      typeArguments: [params.quoteType],
+      arguments: [vault, tx.object(params.keeperCapId), tx.pure.u64(params.budget)],
+    });
+    this.addRollIntoStrategy(tx, params, vault);
+    return tx;
+  }
+
+  private addRollIntoStrategy(tx: Transaction, params: RollIntoStrategyParams, vault = tx.object(params.vaultId)) {
     const legs = this.legVec(tx, params.legs);
     tx.moveCall({
       target: `${this.pkg}::vault::roll_into_strategy`,
       typeArguments: [params.quoteType],
       arguments: [
-        tx.object(params.vaultId),
+        vault,
         tx.object(params.managerEscrowId),
         tx.object(params.predictId),
         tx.object(params.managerId),
@@ -178,7 +200,6 @@ export class VaultClient {
         tx.object('0x6'),
       ],
     });
-    return tx;
   }
 
   async readNav(vaultId: string, quoteType: string, sender: string): Promise<number> {
