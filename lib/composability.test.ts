@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { navDiscountPct, quoteConstantProductExit } from './cetus';
 import { builderFee, capacityCappedBuilderFee, rankPublishers } from './creator';
 import { buildSponsoredTransactionRequest, enokiAuthProvidersFromEnv, requestSponsoredTransaction, sponsorConfigFromEnv } from './enoki';
-import { pythNavAnchor } from './pyth';
+import {
+  PYTH_BTC_USD_FEED_ID,
+  buildPythPriceFeedUpdate,
+  fetchPythNavAnchor,
+  normalizePythFeedId,
+  pythNavAnchor,
+} from './pyth';
 import { getWalrusJson, hashWalrusPayload, putWalrusJson } from './walrus';
 
 describe('composability helpers', () => {
@@ -35,6 +41,57 @@ describe('composability helpers', () => {
     expect(fresh.price).toBeCloseTo(70_123.456789);
     expect(fresh.stale).toBe(false);
     expect(pythNavAnchor({ price: '1', expo: 0, publishTime: 1 }, 120).stale).toBe(true);
+  });
+
+  it('fetches a parsed Pyth NAV anchor through the Hermes SDK contract', async () => {
+    const anchor = await fetchPythNavAnchor(PYTH_BTC_USD_FEED_ID, 120, {
+      async getLatestPriceUpdates(ids, options) {
+        expect(ids).toEqual([PYTH_BTC_USD_FEED_ID]);
+        expect(options).toEqual({ parsed: true });
+        return {
+          parsed: [
+            {
+              id: PYTH_BTC_USD_FEED_ID.slice(2),
+              price: { price: '7012345678900', conf: '100000000', expo: -8, publish_time: 100 },
+              ema_price: { price: '7011000000000', conf: '200000000', expo: -8, publish_time: 99 },
+            },
+          ],
+        };
+      },
+    });
+
+    expect(anchor.feedId).toBe(PYTH_BTC_USD_FEED_ID);
+    expect(anchor.price).toBeCloseTo(70_123.456789);
+    expect(anchor.confidence).toBe(1);
+    expect(anchor.emaPrice).toBe(70_110);
+    expect(anchor.stale).toBe(false);
+  });
+
+  it('builds a Pyth price-feed update against the Sui SDK wrapper', async () => {
+    const tx = {};
+    const updateBytes = [new Uint8Array([1, 2, 3])];
+    const priceInfoIds = await buildPythPriceFeedUpdate(tx, {}, [PYTH_BTC_USD_FEED_ID.slice(2)], {
+      connection: {
+        async getLatestPriceUpdates() {
+          throw new Error('not used');
+        },
+        async getPriceFeedsUpdateData(ids) {
+          expect(ids).toEqual([PYTH_BTC_USD_FEED_ID]);
+          return updateBytes;
+        },
+      },
+      pythClient: {
+        async updatePriceFeeds(gotTx, gotUpdates, gotIds) {
+          expect(gotTx).toBe(tx);
+          expect(gotUpdates).toBe(updateBytes);
+          expect(gotIds).toEqual([PYTH_BTC_USD_FEED_ID]);
+          return ['0xprice-info'];
+        },
+      },
+    });
+
+    expect(normalizePythFeedId(PYTH_BTC_USD_FEED_ID.slice(2))).toBe(PYTH_BTC_USD_FEED_ID);
+    expect(priceInfoIds).toEqual(['0xprice-info']);
   });
 
   it('quotes secondary exits and NAV discount', () => {

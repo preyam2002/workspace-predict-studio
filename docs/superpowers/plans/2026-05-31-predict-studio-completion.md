@@ -119,9 +119,9 @@ function RegisterEnokiWallets() {
 
 Testnet constants (verify at pyth.network feed-ids#sui-testnet): Hermes `https://hermes-beta.pyth.network`; Pyth state `0x243759059f4c3111179da5878c12f68d612c21a8d54d85edc86164bb18be1c7c`; Wormhole state `0x31358d198147da50db32eda2562951d53973a0c0ad5ed738e9b17d88b213d790`; **BTC/USD feed id** `0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b`.
 
-- [ ] **Display path (no tx):** `new SuiPriceServiceConnection('https://hermes-beta.pyth.network').getLatestPriceUpdates([BTC_FEED], { parsed:true })` → `Number(price)*10**expo` for the live NAV/oracle panel.
-- [ ] **PTB path (optional, for settlement preamble):** `SuiPythClient(suiClient, pythState, wormholeState).updatePriceFeeds(tx, updateData, [BTC_FEED])` → returns `PriceInfoObject` ids; pay base update fee. Only add if a mint/settle needs a fresh on-chain price beyond Predict's own oracle.
-- [ ] **Commit** `feat(pyth): live BTC price for NAV + optional settlement preamble`.
+- [x] **Display path (no tx):** `new SuiPriceServiceConnection('https://hermes-beta.pyth.network').getLatestPriceUpdates([BTC_FEED], { parsed:true })` → `Number(price)*10**expo` for the live NAV/oracle panel. Implemented through `/api/pyth/btc` + React Query; live Hermes probe returned parsed BTC/USD.
+- [x] **PTB path (optional, for settlement preamble):** `SuiPythClient(suiClient, pythState, wormholeState).updatePriceFeeds(tx, updateData, [BTC_FEED])` → returns `PriceInfoObject` ids; pay base update fee. Added `buildPythPriceFeedUpdate` wrapper with mocked SDK contract test; not wired to mint/settle because Predict's own oracle is still the settlement source.
+- [x] **Commit** `feat(pyth): live BTC price for NAV + optional settlement preamble`.
 
 ### P1.3 — Cetus CLMM secondary market for STUDIO_LP 🔎VERIFY-FIRST
 

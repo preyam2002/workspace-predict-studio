@@ -11,6 +11,7 @@ import { getPublisherLeaderboard } from '@/lib/indexer';
 import { optimize, optimizeSparse } from '@/lib/optimizer';
 import { breakevens, ev, legProb, maxGain } from '@/lib/payoff';
 import { PredictClient, loadOracleState } from '@/lib/predict-client';
+import type { PythNavAnchor } from '@/lib/pyth';
 import { USDC, type OracleState, type SparseTarget, type StructureQuote, type Template } from '@/lib/types';
 import { Backtester } from './Backtester';
 import { CatalogPicker } from './CatalogPicker';
@@ -42,6 +43,15 @@ function withScenario(oracle: OracleState, scenario: Scenario): OracleState {
   };
 }
 
+async function loadPythBtcAnchor(): Promise<PythNavAnchor> {
+  const response = await fetch('/api/pyth/btc', { cache: 'no-store' });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new Error(body?.error ?? 'Pyth BTC unavailable');
+  }
+  return response.json() as Promise<PythNavAnchor>;
+}
+
 export function Builder() {
   const sui = useSuiClient();
   const account = useCurrentAccount();
@@ -53,6 +63,11 @@ export function Builder() {
   const publisherQuery = useQuery({
     queryKey: ['publisher-leaderboard', STUDIO_PACKAGE],
     queryFn: () => (STUDIO_PACKAGE === '0x0' ? [] : getPublisherLeaderboard(sui, STUDIO_PACKAGE)),
+  });
+  const pythQuery = useQuery({
+    queryKey: ['pyth-btc-anchor'],
+    queryFn: loadPythBtcAnchor,
+    refetchInterval: 30_000,
   });
   const oracle = oracleQuery.data ? withScenario(oracleQuery.data, scenario) : undefined;
   const [template, setTemplate] = useState<Template | null>(null);
@@ -159,7 +174,13 @@ export function Builder() {
         oracle={oracleQuery.data}
         loading={oracleQuery.isLoading}
         error={oracleQuery.error instanceof Error ? oracleQuery.error.message : undefined}
-        onRefresh={() => oracleQuery.refetch()}
+        pythAnchor={pythQuery.data}
+        pythLoading={pythQuery.isLoading}
+        pythError={pythQuery.error instanceof Error ? pythQuery.error.message : undefined}
+        onRefresh={() => {
+          void oracleQuery.refetch();
+          void pythQuery.refetch();
+        }}
       />
 
       {oracle && template ? (
