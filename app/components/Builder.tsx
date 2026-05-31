@@ -1,6 +1,7 @@
 'use client';
 
-import { ConnectButton, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
+import { ConnectButton, useConnectWallet, useCurrentAccount, useSuiClient, useWallets } from '@mysten/dapp-kit';
+import { isGoogleWallet } from '@mysten/enoki';
 import { useQuery } from '@tanstack/react-query';
 import { WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -149,6 +150,7 @@ export function Builder() {
         </div>
         <div className="flex items-center gap-2">
           <WalletCards size={18} className="blue-text" />
+          <EnokiGoogleButton />
           <ConnectButton />
         </div>
       </header>
@@ -239,5 +241,19 @@ export function Builder() {
         <PositionsDashboard client={client} oracle={oracle} />
       </div>
     </main>
+  );
+}
+
+function EnokiGoogleButton() {
+  const account = useCurrentAccount();
+  const wallets = useWallets();
+  const { mutate, isPending } = useConnectWallet();
+  const googleWallet = wallets.find(isGoogleWallet);
+  if (account || !googleWallet) return null;
+
+  return (
+    <button className="icon-button" disabled={isPending} type="button" onClick={() => mutate({ wallet: googleWallet })}>
+      Google
+    </button>
   );
 }

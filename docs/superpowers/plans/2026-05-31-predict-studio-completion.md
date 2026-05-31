@@ -107,9 +107,9 @@ function RegisterEnokiWallets() {
 // mount <RegisterEnokiWallets/> inside SuiClientProvider, above WalletProvider
 ```
 
-- [ ] **Step 2 — sponsored mint (3-leg round-trip).** Client builds **kind-only** bytes (`tx.build({ client, onlyTransactionKind: true })`), POSTs to `/api/sponsor`, user signs returned bytes, POSTs sig to `/api/execute`. Backend uses `new EnokiClient({ apiKey: process.env.ENOKI_PRIVATE_KEY! })` → `createSponsoredTransaction({ network:'testnet', transactionKindBytes, sender, allowedMoveCallTargets:[`${PKG}::studio::build_and_mint_to_sender`], allowedAddresses:[sender] })` then `executeSponsoredTransaction({ digest, signature })`. (Full code in the SDK-research appendix.)
-- [ ] **Step 3 —** add a "Sign in with Google" path (filter `useWallets().filter(isEnokiWallet)`, connect the `google` provider) and a "buy gasless" toggle on `MintButton`.
-- [ ] **Step 4 —** test the sponsor route with a mocked `EnokiClient` (unit) + manual testnet smoke once tokens exist. **Commit** `feat(enoki): zkLogin login + sponsored gasless mint`.
+- [x] **Step 2 — sponsored mint (3-leg round-trip).** Client builds **kind-only** bytes (`tx.build({ client, onlyTransactionKind: true })`), POSTs to `/api/sponsor`, user signs returned bytes, POSTs sig to `/api/execute`. Backend uses `new EnokiClient({ apiKey: process.env.ENOKI_PRIVATE_KEY! })` → `createSponsoredTransaction({ network:'testnet', transactionKindBytes, sender, allowedMoveCallTargets:[`${PKG}::studio::build_and_mint_to_sender`], allowedAddresses:[sender] })` then `executeSponsoredTransaction({ digest, signature })`. (Full code in the SDK-research appendix.)
+- [x] **Step 3 —** add a "Sign in with Google" path (filter `useWallets().filter(isEnokiWallet)`, connect the `google` provider) and a "buy gasless" toggle on `MintButton`.
+- [ ] **Step 4 —** unit-tested sponsor/execute helpers with a mocked Enoki client; manual testnet smoke remains blocked on Enoki private key + funded manager/tokens. **Commit** `feat(enoki): zkLogin login + sponsored gasless mint`.
 
 > **Gotchas:** never ship the private key client-side; `onlyTransactionKind:true` is mandatory (full build → Enoki rejects); targets must match the Portal allowlist; Enoki wallets are network-bound (re-register on switch).
 
