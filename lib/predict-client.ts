@@ -149,6 +149,7 @@ export async function loadOracleState(
   const fields = getFields(object.data);
   const prices = (fields.prices as { fields?: MoveObjectFields }).fields;
   if (!prices) throw new Error('Oracle object missing prices');
+  const exposedMaxStrike = optionalNumeric(fields.max_strike ?? indexerOracle.max_strike);
 
   return {
     predictId: indexerOracle.predict_id,
@@ -166,10 +167,9 @@ export async function loadOracleState(
     svi: parseSvi(fields.svi),
     minStrike: Number(indexerOracle.min_strike),
     tickSize: Number(indexerOracle.tick_size),
-    maxStrike: Math.max(
-      Number(indexerOracle.min_strike) + Number(indexerOracle.tick_size) * 100_000,
-      numeric(prices.spot) * 1.5,
-    ),
+    maxStrike:
+      exposedMaxStrike ??
+      Math.max(Number(indexerOracle.min_strike) + Number(indexerOracle.tick_size) * 100_000, numeric(prices.spot) * 1.5),
   };
 }
 

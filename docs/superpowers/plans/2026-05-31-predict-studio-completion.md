@@ -69,9 +69,9 @@ These are bugs the test suite missed because the asserts were weak. They must be
 
 ### P0.6 — Code-consistency fixes (from doc/source drift)
 
-- [ ] `setup-manager.ts` + `REFERENCE_IMPLEMENTATION.md` call `predict_manager::new` — but the real entry is **`predict::create_manager`** (README:50). Fix the call + the `PredictManagerCreated` event field assumption. 🔎VERIFY-FIRST against `getNormalizedMoveFunction`.
-- [ ] `indexer.ts` references dead routes `/prices/latest` + `/history/settlements` (404). Confirm only `/oracles` + Sui-RPC are used; delete dead route code.
-- [ ] `predict-client.ts:169` `maxStrike` is a heuristic — read it from the oracle if exposed. **Commit** `fix: align manager-creation entry, drop dead indexer routes`.
+- [x] `setup-manager.ts` + `REFERENCE_IMPLEMENTATION.md` call `predict_manager::new` — but the real entry is **`predict::create_manager`** (README:50). Fixed the reference implementation and verified vendored source/event fields (`PredictManagerCreated { manager_id, owner }`).
+- [x] `indexer.ts` references dead routes `/prices/latest` + `/history/settlements` (404). Confirmed built code uses only `/oracles` + Sui-RPC; removed the stale dead-route snippets from `REFERENCE_IMPLEMENTATION.md`.
+- [x] `predict-client.ts:169` `maxStrike` is a heuristic — read it from the oracle if exposed. Live oracle fields do not expose `max_strike`; `loadOracleState` now prefers future `max_strike` when present and otherwise keeps the heuristic. **Commit** `fix: align manager creation and oracle route assumptions`.
 
 ---
 

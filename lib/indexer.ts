@@ -15,6 +15,7 @@ export interface IndexerOracle {
   settlement_price?: number;
   settled_at?: number;
   created_checkpoint?: number;
+  max_strike?: number;
 }
 
 async function get<T>(path: string): Promise<T> {

@@ -8,8 +8,8 @@ These are the only places I could not 100% confirm from source. Confirm each on 
 
 1. **Price/strike scale.** `oracle.spot_price()/forward_price()/strike` scale (1e9-fixed vs 6-decimal). The pricing math below uses `k = ln(strike/forward)`, so **scale cancels** as long as strike and forward share one scale — robust either way. Only the x-axis labels on the chart care; read one live oracle and confirm (e.g. is BTC spot `70000_000000000` or `70000000000`).
 2. **`compute_nd2` convention.** The digital-call price `N(d2)` formula in `payoff.ts` must match `oracle.move::compute_nd2`. Open the vendored `move/build/predict_studio/sources/dependencies/deepbook_predict/oracle.move`, read `compute_nd2`/`compute_price`, and confirm the `d2 = (ln(F/K) - w/2)/√w` convention + that `range = up(lower) − up(higher)`.
-3. **PredictManager creation entry.** Grep the vendored `predict_manager.move` / `predict.move` for the `new`/`create` entry (it wraps a DeepBook `BalanceManager`). `setup-manager.ts` assumes `deepbook_predict::predict_manager::new(...)`; fix the target if different.
-4. **devInspect return decoding + indexer routes.** Confirm `get_trade_amounts` returns `(u64,u64)` decodable from `results[0].returnValues` (it does per source), and confirm the `predict-server.testnet` route shapes by `curl`ing `/oracles` once.
+3. **PredictManager creation entry.** Confirmed from vendored source: call `deepbook_predict::predict::create_manager(ctx)`. `predict_manager::new` is `public(package)`, emits `PredictManagerCreated { manager_id, owner }`, and cannot be called from scripts.
+4. **devInspect return decoding + indexer routes.** Confirmed `get_trade_amounts` returns `(u64,u64)` decodable from `results[0].returnValues`; `predict-server.testnet` uses `/oracles` for oracle, price, and settlement history data. The old `/prices/latest` and `/history/settlements` assumptions returned 404 and should not be used.
 
 ---
 
@@ -399,13 +399,14 @@ export class PredictClient {
 const BASE = 'https://predict-server.testnet.mystenlabs.com';
 const get = async (p: string) => { const r = await fetch(`${BASE}${p}`); if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.json(); };
 
-// VERIFY exact routes/shapes by curling /oracles once (VERIFY-FIRST #4).
 export const getOracles = () => get('/oracles');
 export const getManagerPositions = (id: string) => get(`/managers/${id}/positions/summary`);
 export const getManagerPnl = (id: string) => get(`/managers/${id}/pnl`);
-export const getPrices = (oracleId: string) => get(`/prices/latest?oracle=${oracleId}`);
-// History for the backtester: settled oracles + their settlement prices.
-export const getSettledHistory = (asset = 'BTC') => get(`/history/settlements?asset=${asset}`);
+export const getPrices = async (oracleId: string) => (await getOracles()).find((o: any) => o.oracle_id === oracleId);
+export const getSettledHistory = async (asset = 'BTC') =>
+  (await getOracles())
+    .filter((o: any) => o.underlying_asset === asset && o.status === 'settled' && o.settlement_price !== undefined)
+    .map((o: any) => ({ settlementPrice: Number(o.settlement_price), expiryMs: Number(o.expiry) }));
 ```
 
 ---
@@ -454,23 +455,25 @@ console.log('published predict_studio:', pkg);
 
 ## `scripts/setup-manager.ts`
 ```ts
-// Creates + funds a PredictManager with dUSDC. VERIFY the creation entry (VERIFY-FIRST #3).
+// Creates + funds a PredictManager with dUSDC.
 import { SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { readFileSync, writeFileSync } from 'node:fs';
-const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8'));   // {dbp, dusdcType, dusdcCoinId, predictId}
+const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8'));   // {dbp, dusdcType, dusdcCoinId}
 const kp = Ed25519Keypair.fromSecretKey(process.env.SUI_KEYPAIR!);
 const client = new SuiClient({ url: process.env.SUI_RPC! });
 const tx = new Transaction();
-// 1) create manager (confirm target+args against vendored predict_manager.move)
-const mgr = tx.moveCall({ target: `${cfg.dbp}::predict_manager::new`, arguments: [] });
-// 2) fund it with dUSDC
-tx.moveCall({ target: `${cfg.dbp}::predict_manager::deposit`, typeArguments: [cfg.dusdcType],
-  arguments: [mgr, tx.object(cfg.dusdcCoinId), ] });
-tx.transferObjects([mgr], kp.toSuiAddress());
-const r = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showObjectChanges: true } });
-const managerId = r.objectChanges?.find((c: any) => c.objectType?.includes('PredictManager'))?.objectId;
+tx.moveCall({ target: `${cfg.dbp}::predict::create_manager`, arguments: [] });
+const r = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEvents: true, showEffects: true } });
+const evt = r.events?.find((e: any) => e.type.endsWith('::predict_manager::PredictManagerCreated'));
+const managerId = evt?.parsedJson?.manager_id;
+if (cfg.dusdcType && cfg.dusdcCoinId) {
+  const fund = new Transaction();
+  fund.moveCall({ target: `${cfg.dbp}::predict_manager::deposit`, typeArguments: [cfg.dusdcType],
+    arguments: [fund.object(managerId), fund.object(cfg.dusdcCoinId)] });
+  await client.signAndExecuteTransaction({ signer: kp, transaction: fund, options: { showEffects: true } });
+}
 writeFileSync('./deploy.json', JSON.stringify({ ...JSON.parse(readFileSync('./deploy.json','utf8')), managerId }, null, 2));
 console.log('manager:', managerId);
 ```
