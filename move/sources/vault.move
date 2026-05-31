@@ -482,7 +482,7 @@ module predict_studio::vault {
         assert!(cap.vault_id == object::id(v), ENotKeeper);
         assert!(budget <= cap.max_budget, EBudgetTooHigh);
         assert!(balance::value(&v.pending) <= budget, EBudgetTooHigh);
-        v.strategy_open = false;
+        assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyAlreadyOpen);
         process_pending(v);
     }
 

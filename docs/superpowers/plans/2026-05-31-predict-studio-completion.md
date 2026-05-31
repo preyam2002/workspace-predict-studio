@@ -50,8 +50,8 @@ These are bugs the test suite missed because the asserts were weak. They must be
 
 **Problem:** on-chain `keeper_roll` only flips `strategy_open=false` + `process_pending`; the `KeeperCap.max_budget` check guards nothing (budget unused after assert). Real rolling lives in the TS `buildKeeperRollIntoStrategyTx`.
 
-- [ ] **Decision:** keep the *settlement* side on-chain (`keeper_settle` that calls `studio::settle` when `oracle.is_settled()`), and keep *re-entry* in the TS keeper PTB (which already exists). Delete the misleading `keeper_roll` or rename to `keeper_settle_and_process`. Enforce the budget against the next roll's premium.
-- [ ] **Test + implement + commit** `fix(vault): keeper entry actually settles + enforces budget`.
+- [x] **V1 safety fix:** `keeper_roll` no longer pretends to close an open strategy; it aborts if `strategy_open` or a stored `StructuredPosition` remains, and it enforces the pending-asset budget before processing deposits.
+- [ ] **Settlement follow-up:** add `keeper_settle` that calls `studio::settle` when `oracle.is_settled()` and clears the stored position before `keeper_roll` can process the next round. Commit `fix(vault): keeper entry actually settles`.
 
 ### P0.4 — PT/YT production settlement (plan task 4.2 was never built)
 

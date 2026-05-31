@@ -306,6 +306,41 @@ module predict_studio::vault_tests {
         vault::destroy_for_testing(v);
     }
 
+    #[test, expected_failure(abort_code = 13)]
+    fun keeper_roll_rejects_open_position_without_settlement() {
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(admin);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut v = vault::new_for_testing(scenario.ctx());
+            let manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            let cap = vault::grant_keeper(&v, 1_000_000, scenario.ctx());
+            let position = studio::new_for_testing(
+                manager_id,
+                object::id(&v),
+                string::utf8(b"test_strategy"),
+                vector[studio::new_leg(false, true, 70_000, 0, 1_000_000)],
+                123_000,
+                scenario.ctx(),
+            );
+
+            vault::record_open_position(&mut v, &escrow, &manager, position, scenario.ctx());
+            vault::keeper_roll(&mut v, &cap, 0);
+
+            vault::destroy_keeper_for_testing(cap);
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
     #[test, expected_failure(abort_code = 8)]
     fun keeper_cap_rejects_wrong_vault() {
         let mut ctx = tx_context::dummy();
