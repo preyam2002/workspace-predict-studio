@@ -145,8 +145,8 @@ Testnet (free, no wallet): publisher `https://publisher.walrus-testnet.walrus.sp
 
 ### P1.5 — Wire the two static UI panels
 
-- [ ] **`VaultMarket.tsx`** — done in P1.3 (live NAV + secondary + deposit/withdraw/claim buttons calling `VaultClient`).
-- [ ] **`TranchePanel.tsx`** — replace static markup with `TrancheClient` split/merge/redeem actions against a real vault share; show PT (fixed floor) vs YT (upside) balances. **Commit** `feat(ui): wire VaultMarket + TranchePanel to live clients`.
+- [x] **`VaultMarket.tsx`** — done in P1.3 (live NAV + secondary + deposit/withdraw/claim buttons calling `VaultClient`).
+- [x] **`TranchePanel.tsx`** — replaced static markup with `TrancheClient` split/merge/redeem actions against configured live vault/share/PT/YT object IDs; shows wallet PT/YT balances and floor setting. **Commit** `feat(ui): wire VaultMarket + TranchePanel to live clients`.
 
 ### P1.6 — Test hardening (kill the tautological asserts)
 
