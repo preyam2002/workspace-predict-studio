@@ -91,6 +91,13 @@ NEXT_PUBLIC_WALRUS_PUBLISHER=https://publisher.walrus-testnet.walrus.space
 NEXT_PUBLIC_WALRUS_AGGREGATOR=https://aggregator.walrus-testnet.walrus.space
 ```
 
+The intent API also reads these server-only variables:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-6 # optional
+```
+
 ## Live Commands
 
 ```bash

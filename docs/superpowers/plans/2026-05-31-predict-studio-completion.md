@@ -164,10 +164,10 @@ From competitive research. Do in this order; each is independently shippable. **
 
 **Files:** `lib/ai-intent.ts`, `app/api/intent/route.ts`, `app/components/IntentBar.tsx`.
 
-- [ ] **Step 1 — define a constrained payoff DSL** (a JSON schema the existing engine already consumes: `TargetPayoff` regions OR a catalog template + params). The LLM may ONLY emit this schema — so it can never produce an un-replicable (negative) payoff.
-- [ ] **Step 2 — `/api/intent`** calls the Anthropic API (`claude-opus-4-8` or `claude-sonnet-4-6`) with a system prompt: "Given a market view + current BTC spot/forward/expiry, output a JSON payoff spec in this schema. Long-only: payoff must be ≥0 everywhere." Use tool-use / structured output to force schema conformance; validate server-side; reject + retry on violation.
-- [ ] **Step 3 — `IntentBar.tsx`** above the Builder: free-text in → spec out → feeds the *existing* `solveSparse`/`optimizeBasket` → payoff chart + premium + greeks → one-click mint. Show the natural-language echo ("You're buying: a $90k–$110k range note, max loss = premium $X, max gain $Y").
-- [ ] **Step 4 — test** the DSL validator (LLM output → never negative `g`, always ≤8 legs after solve) with recorded fixtures (don't call the live API in CI). **Commit** `feat(ai): natural-language market-view → structured note`.
+- [x] **Step 1 — define a constrained payoff DSL** (a JSON schema the existing engine already consumes: `TargetPayoff` regions OR a catalog template + params). The LLM may ONLY emit this schema — so it can never produce an un-replicable (negative) payoff.
+- [x] **Step 2 — `/api/intent`** calls the Anthropic API (default `claude-sonnet-4-6`, overrideable via `ANTHROPIC_MODEL`) with a system prompt: "Given a market view + current BTC spot/forward/expiry, output a JSON payoff spec in this schema. Long-only: payoff must be ≥0 everywhere." Use tool-use / structured output to force schema conformance; validate server-side; reject + retry on violation.
+- [x] **Step 3 — `IntentBar.tsx`** above the Builder: free-text in → spec out → feeds the *existing* `solveSparse`/`optimizeBasket` → payoff chart + premium + greeks → one-click mint. Show the natural-language echo ("You're buying: a $90k–$110k range note, max loss = premium $X, max gain $Y").
+- [x] **Step 4 — test** the DSL validator (LLM output → never negative `g`, always ≤8 legs after solve) with recorded fixtures (don't call the live API in CI). **Commit** `feat(ai): natural-language market-view → structured note`.
 
 ### P2.2 — Per-note live greeks + payoff/PnL diagram ★ (~2d)
 

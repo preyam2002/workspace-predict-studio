@@ -59,7 +59,7 @@ export async function optimize(
 
 export function optimizeSparse(target: SparseTarget, svi: SVI, forward: number) {
   const candidates = [4, 6, 8].map((maxLegs) =>
-    priceSolution(solveCertifiedSparse(target, { maxLegs, tol: 0.005 }).solution, svi, forward),
+    priceSolution(solveCertifiedSparse(target, { maxLegs, tol: 0.005, maxSupports: 10_000 }).solution, svi, forward),
   );
   candidates.sort((a, b) => a.premiumEst - b.premiumEst || a.legCount - b.legCount);
   return { best: candidates[0], all: candidates };

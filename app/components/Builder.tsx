@@ -17,6 +17,7 @@ import { Backtester } from './Backtester';
 import { CatalogPicker } from './CatalogPicker';
 import { CreatorLeaderboard } from './CreatorLeaderboard';
 import { DrawPayoffCanvas, defaultDrawTarget } from './DrawPayoffCanvas';
+import { IntentBar } from './IntentBar';
 import { MintButton } from './MintButton';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
@@ -71,9 +72,11 @@ export function Builder() {
   });
   const oracle = oracleQuery.data ? withScenario(oracleQuery.data, scenario) : undefined;
   const [template, setTemplate] = useState<Template | null>(null);
-  const [quoteMode, setQuoteMode] = useState<'template' | 'catalog' | 'draw'>('template');
+  const [quoteMode, setQuoteMode] = useState<'template' | 'catalog' | 'draw' | 'intent'>('template');
   const [catalogId, setCatalogId] = useState<CatalogProductId>('fixed_coupon_range');
   const [drawTarget, setDrawTarget] = useState<SparseTarget | null>(null);
+  const [intentTarget, setIntentTarget] = useState<SparseTarget | null>(null);
+  const [intentEcho, setIntentEcho] = useState<string | undefined>();
   const [quote, setQuote] = useState<StructureQuote | undefined>();
   const [quoteSource, setQuoteSource] = useState('local SVI estimate');
   const [digest, setDigest] = useState<string | undefined>();
@@ -91,12 +94,12 @@ export function Builder() {
     if (!oracle || !template) return;
     let active = true;
 
-    if (quoteMode === 'catalog' || quoteMode === 'draw') {
-      const target = quoteMode === 'catalog' ? buildCatalogTarget(catalogId, oracle) : drawTarget;
+    if (quoteMode === 'catalog' || quoteMode === 'draw' || quoteMode === 'intent') {
+      const target = quoteMode === 'catalog' ? buildCatalogTarget(catalogId, oracle) : quoteMode === 'draw' ? drawTarget : intentTarget;
       if (!target) return;
       const res = optimizeSparse(target, oracle.svi, oracle.forward);
       const totalCost = Math.round(res.best.premiumEst * USDC);
-      setQuoteSource('NNOMP sparse SVI estimate');
+      setQuoteSource(quoteMode === 'intent' ? 'AI intent sparse SVI estimate' : 'NNOMP sparse SVI estimate');
       setQuote({
         legs: res.best.legs,
         totalCost,
@@ -147,14 +150,15 @@ export function Builder() {
     return () => {
       active = false;
     };
-  }, [account, catalogId, client, drawTarget, oracle, quoteMode, template]);
+  }, [account, catalogId, client, drawTarget, intentTarget, oracle, quoteMode, template]);
 
   const sparseTarget = useMemo(() => {
     if (!oracle) return undefined;
     if (quoteMode === 'catalog') return buildCatalogTarget(catalogId, oracle);
     if (quoteMode === 'draw') return drawTarget ?? undefined;
+    if (quoteMode === 'intent') return intentTarget ?? undefined;
     return undefined;
-  }, [catalogId, drawTarget, oracle, quoteMode]);
+  }, [catalogId, drawTarget, intentTarget, oracle, quoteMode]);
 
   return (
     <main className="app-shell">
@@ -184,7 +188,18 @@ export function Builder() {
       />
 
       {oracle && template ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr_360px]">
+        <>
+          <IntentBar
+            oracle={oracle}
+            quote={quoteMode === 'intent' ? quote : undefined}
+            activeEcho={quoteMode === 'intent' ? intentEcho : undefined}
+            onIntent={(intent) => {
+              setIntentTarget(intent.target);
+              setIntentEcho(intent.echo);
+              setQuoteMode('intent');
+            }}
+          />
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr_360px]">
           <div className="grid content-start gap-4">
             <TemplatePicker
               oracle={oracle}
@@ -215,7 +230,7 @@ export function Builder() {
               client={client}
               oracle={oracle}
               legs={quote?.legs ?? []}
-              shape={quoteMode === 'catalog' ? catalogId : quoteMode === 'draw' ? 'drawn_payoff' : template.kind}
+              shape={quoteMode === 'catalog' ? catalogId : quoteMode === 'draw' ? 'drawn_payoff' : quoteMode === 'intent' ? 'ai_intent' : template.kind}
               maxLossBudget={quote?.totalCost ?? 0}
               disabled={!account || STUDIO_PACKAGE === '0x0'}
               onMinted={setDigest}
@@ -251,7 +266,8 @@ export function Builder() {
             <CreatorLeaderboard ranks={publisherQuery.data ?? []} />
             {quote ? <PortfolioPanel oracle={oracle} positions={[{ legs: quote.legs, premium: quote.totalCost }]} /> : null}
           </div>
-        </div>
+          </div>
+        </>
       ) : null}
 
       <div className="mt-4">
