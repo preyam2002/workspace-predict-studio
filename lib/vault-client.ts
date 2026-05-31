@@ -245,4 +245,17 @@ export class VaultClient {
     if (!navBytes) throw new Error('readNav: missing devInspect return value');
     return decodeU64LE(navBytes);
   }
+
+  async readShareValue(vaultId: string, quoteType: string, shares: number, sender: string): Promise<number> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${this.pkg}::vault::share_value`,
+      typeArguments: [quoteType],
+      arguments: [tx.object(vaultId), tx.pure.u64(shares)],
+    });
+    const result = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
+    const valueBytes = result.results?.at(-1)?.returnValues?.[0]?.[0];
+    if (!valueBytes) throw new Error('readShareValue: missing devInspect return value');
+    return decodeU64LE(valueBytes);
+  }
 }

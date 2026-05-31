@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@cetusprotocol/common-sdk':
+        specifier: ^1.3.7
+        version: 1.3.7(@mysten/sui@2.17.0(typescript@6.0.3))(axios@1.16.1)
+      '@cetusprotocol/sui-clmm-sdk':
+        specifier: ^1.4.5
+        version: 1.4.5(@cetusprotocol/common-sdk@1.3.7(@mysten/sui@2.17.0(typescript@6.0.3))(axios@1.16.1))(@mysten/sui@2.17.0(typescript@6.0.3))(blakejs@1.2.1)
       '@mysten/dapp-kit':
         specifier: ^1.0.6
         version: 1.0.6(@mysten/sui@2.17.0(typescript@6.0.3))(@tanstack/react-query@5.100.14(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(immer@11.1.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(use-sync-external-store@1.6.0(react@19.2.6))
@@ -93,6 +99,18 @@ packages:
   '@babel/runtime@7.29.7':
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
+
+  '@cetusprotocol/common-sdk@1.3.7':
+    resolution: {integrity: sha512-Q5aNl8VZW5DEYAC4mFWSxD59IRlNr1wwqag0d2gxTS9rSMN7FaAno74EUcltL43RE9ZCFtKAKxjRw8T+67Uo7g==}
+    peerDependencies:
+      '@mysten/sui': '>=2.0.0'
+
+  '@cetusprotocol/sui-clmm-sdk@1.4.5':
+    resolution: {integrity: sha512-In1kpNh9tn8flkcst9gbiI7bsZnUQD5X7cQRCKQEG+EbRrAx5qcEmMZm03533jNi3V0ZJElk49+DoqIRzpnZWg==}
+    peerDependencies:
+      '@cetusprotocol/common-sdk': '*'
+      '@mysten/sui': '>=2.0.0'
+      blakejs: '*'
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -1330,6 +1348,9 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  blakejs@1.2.1:
+    resolution: {integrity: sha512-QXUSXI3QVc/gJME0dBpXrag1kbzOqCjCX8/b54ntNyW6sjtoqxqRk3LTmXzaJoh71zMsDCjM+47jS7XiwN/+fQ==}
+
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
@@ -2088,6 +2109,19 @@ snapshots:
   '@alloc/quick-lru@5.2.0': {}
 
   '@babel/runtime@7.29.7': {}
+
+  '@cetusprotocol/common-sdk@1.3.7(@mysten/sui@2.17.0(typescript@6.0.3))(axios@1.16.1)':
+    dependencies:
+      '@mysten/sui': 2.17.0(typescript@6.0.3)
+      '@pythnetwork/hermes-client': 3.1.0(axios@1.16.1)
+    transitivePeerDependencies:
+      - axios
+
+  '@cetusprotocol/sui-clmm-sdk@1.4.5(@cetusprotocol/common-sdk@1.3.7(@mysten/sui@2.17.0(typescript@6.0.3))(axios@1.16.1))(@mysten/sui@2.17.0(typescript@6.0.3))(blakejs@1.2.1)':
+    dependencies:
+      '@cetusprotocol/common-sdk': 1.3.7(@mysten/sui@2.17.0(typescript@6.0.3))(axios@1.16.1)
+      '@mysten/sui': 2.17.0(typescript@6.0.3)
+      blakejs: 1.2.1
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -3195,6 +3229,8 @@ snapshots:
   base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.10.32: {}
+
+  blakejs@1.2.1: {}
 
   buffer@6.0.3:
     dependencies:

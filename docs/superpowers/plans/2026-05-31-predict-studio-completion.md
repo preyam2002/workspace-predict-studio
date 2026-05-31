@@ -127,9 +127,9 @@ Testnet constants (verify at pyth.network feed-ids#sui-testnet): Hermes `https:/
 
 **Files:** add `@cetusprotocol/sui-clmm-sdk@^1.4.5`; rewrite `lib/cetus.ts`; wire `VaultMarket.tsx`.
 
-- [ ] **Step 1 — VERIFY** the Cetus CLMM package is actually deployed on Sui *testnet* (`CetusClmmSDK.createSDK({ env:'testnet' })` must resolve a package id). If not deployed on testnet, fall back to a **mock secondary-price panel** and note it in the demo (do not fake a live pool).
-- [ ] **Step 2 —** create `STUDIO_LP/dUSDC` pool via `Pool.calculateCreatePoolWithPrice(...)` → `Pool.createPoolWithPricePayload(...)` (price-range API; full snippet in appendix). Read price via `TickMath.sqrtPriceX64ToPrice(pool.current_sqrt_price, 9, 6)`.
-- [ ] **Step 3 —** `VaultMarket.tsx`: replace the hardcoded 3-vault array with live `VaultClient.readNav` + the Cetus secondary price; show **NAV vs secondary** so depositors can exit before expiry. **Commit** `feat(cetus): STUDIO_LP/dUSDC pool + NAV-vs-secondary in VaultMarket`.
+- [x] **Step 1 — VERIFY** the Cetus CLMM package is actually deployed on Sui *testnet* (`CetusClmmSDK.createSDK({ env:'testnet' })` must resolve a package id). Verified through `verifyCetusDeployment`: package `0x5372...2db8`, published_at `0x6bbd...edf7`, sample pool `0xa8b0...d9da`. SDK required an explicit fullnode URL, so `createCetusSdk` now supplies one.
+- [x] **Step 2 —** create `STUDIO_LP/dUSDC` pool via `Pool.calculateCreatePoolWithPrice(...)` → `Pool.createPoolWithPricePayload(...)` (price-range API; full snippet in appendix). Added `buildCreateCetusPoolWithPriceTx`; actual pool creation is token/deploy-gated.
+- [x] **Step 3 —** `VaultMarket.tsx`: replace the hardcoded 3-vault array with live `VaultClient.readShareValue` + the Cetus secondary price; show **NAV vs secondary** so depositors can exit before expiry. Falls back to generated demo vault fixtures + explicit `mock` secondary label when no `NEXT_PUBLIC_CETUS_STUDIO_POOL_ID` is configured. **Commit** `feat(cetus): STUDIO_LP/dUSDC pool + NAV-vs-secondary in VaultMarket`.
 
 ### P1.4 — Walrus self-describing notes (raw HTTP, simplest) 
 

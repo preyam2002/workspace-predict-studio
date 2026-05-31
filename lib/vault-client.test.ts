@@ -103,4 +103,24 @@ describe('VaultClient', () => {
 
     await expect(client.readNav(ids.vaultId, ids.quoteType, ids.recipient)).resolves.toBe(1_000_000);
   });
+
+  it('reads one-share value from a devInspect u64 return value', async () => {
+    const client = new VaultClient(
+      {
+        devInspectTransactionBlock: async (input: {
+          transactionBlock: { getData: () => { commands: Array<{ MoveCall?: { function?: string } }> } };
+        }) => {
+          const { transactionBlock } = input;
+          const call = transactionBlock.getData().commands[0].MoveCall;
+          expect(call?.function).toBe('share_value');
+          return {
+            results: [{ returnValues: [[[0x20, 0xa1, 0x07, 0, 0, 0, 0, 0], 'u64']] }],
+          };
+        },
+      } as never,
+      '0x4',
+    );
+
+    await expect(client.readShareValue(ids.vaultId, ids.quoteType, 500_000, ids.recipient)).resolves.toBe(500_000);
+  });
 });
