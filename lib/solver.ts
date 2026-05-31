@@ -339,7 +339,7 @@ export function solveBranchAndBound(target: SparseTarget, opts: ExactSolveOpts &
 }
 
 export function mutualCoherence(strikes: number[], maxMacroWidth?: number): number {
-  const dict = buildDictionary(strikes, maxMacroWidth);
+  const dict = pruneByCoherence(buildDictionary(strikes, maxMacroWidth), 0.999999);
   let mu = 0;
   for (let i = 0; i < dict.length; i += 1) {
     for (let j = i + 1; j < dict.length; j += 1) {

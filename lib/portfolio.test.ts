@@ -37,6 +37,20 @@ describe('portfolio analytics', () => {
     expect(grid.some((cell) => cell.spotShockPct === 0 && cell.ivShockPct === 0 && Math.abs(cell.pnl) < 1e-6)).toBe(true);
   });
 
+  it('keeps a long-call scenario grid monotone in spot for a fixed IV shock', () => {
+    const callOnly: PortfolioPosition[] = [
+      {
+        legs: [{ isRange: false, isUp: true, lowerStrike: 100, higherStrike: 0, quantity: USDC }],
+        premium: 0,
+      },
+    ];
+    const grid = scenarioGrid(callOnly, svi, 100, [-20, -10, 0, 10, 20], [0]);
+
+    for (let i = 1; i < grid.length; i += 1) {
+      expect(grid[i].nav).toBeGreaterThanOrEqual(grid[i - 1].nav);
+    }
+  });
+
   it('computes borrow capacity from the provable worst-case floor', () => {
     expect(borrowCapacity(positions, 0.5)).toBe(150_000);
   });

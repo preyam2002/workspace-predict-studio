@@ -119,4 +119,23 @@ describe('exact sparse solving and certification', () => {
     expect(res.solution.legCount).toBeLessThanOrEqual(2);
     expect(res.certificate.coherence).toBe(cert.coherence);
   });
+
+  it('marks known coherent and incoherent dictionaries on opposite sides of the recovery threshold', () => {
+    const oneSparseTarget: SparseTarget = {
+      gridStrikes: [90, 100, 110, 120],
+      g: [0, 0, 1, 1],
+    };
+    const coherent = certifyGap(oneSparseTarget, 1, { maxMacroWidth: 2 });
+    const incoherent = certifyGap(target, 2, { maxMacroWidth: 2 });
+
+    expect(coherent.coherence).toBeLessThan(1);
+    expect(coherent.exactRecovery).toBe(true);
+    expect(coherent.escalate).toBe(false);
+    expect(coherent.gapBound).toBe(0);
+
+    expect(incoherent.coherence).toBeGreaterThanOrEqual(1 / 3);
+    expect(incoherent.exactRecovery).toBe(false);
+    expect(incoherent.escalate).toBe(true);
+    expect(incoherent.gapBound).toBeGreaterThan(0);
+  });
 });

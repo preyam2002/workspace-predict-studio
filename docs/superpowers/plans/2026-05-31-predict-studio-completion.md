@@ -150,7 +150,7 @@ Testnet (free, no wallet): publisher `https://publisher.walrus-testnet.walrus.sp
 
 ### P1.6 — Test hardening (kill the tautological asserts)
 
-- [ ] Strengthen weak tests flagged in audit: `optimizer.test.ts` assert **sequential > naive strictly** when `utilMult>0` (not `≥0`); `catalog.test.ts` assert **each of the 12 products round-trips to ≤8 legs** via `solveSparse` (plan 6.1); `solver` coherence test assert the certificate's `exactRecovery` matches a known-incoherent vs known-coherent dictionary; `portfolio` assert scenario-grid monotonicity, not just `isFinite`. **Commit** `test: replace tautological asserts with property checks`.
+- [x] Strengthen weak tests flagged in audit: `optimizer.test.ts` assert **sequential > naive strictly** when `utilMult>0` (not `≥0`); `catalog.test.ts` assert **each of the 12 products round-trips to ≤8 legs** via `solveSparse` (plan 6.1); `solver` coherence test assert the certificate's `exactRecovery` matches a known-incoherent vs known-coherent dictionary; `portfolio` assert scenario-grid monotonicity, not just `isFinite`. **Commit** `test: replace tautological asserts with property checks`.
 
 ---
 
