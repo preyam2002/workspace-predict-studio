@@ -313,6 +313,7 @@ module predict_studio::vault {
     }
 
     public fun process_pending<Q>(v: &mut StructuredVault<Q>) {
+        assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyAlreadyOpen);
         let assets = balance::value(&v.pending);
         if (assets == 0) return;
         assert!(v.claim_assets == 0 && v.claim_shares == 0, EUnclaimedBatch);

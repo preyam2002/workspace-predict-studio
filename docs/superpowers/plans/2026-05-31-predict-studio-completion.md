@@ -32,6 +32,7 @@ These are bugs the test suite missed because the asserts were weak. They must be
 
 **Files:** `move/sources/vault.move`, `move/tests/vault_tests.move`.
 
+- [x] **V1 safety fix:** deposits and withdrawals cannot reprice shares during an open strategy epoch. `withdraw`, `keeper_roll`, and direct `process_pending` now abort while `strategy_open` or a stored `StructuredPosition` remains.
 - [ ] **Step 1: Failing test** — open a strategy in a test vault, then assert `nav(vault, predict, oracle, clock)` ≈ `idle_after_roll + Σ bid_value(leg)`, and that `to_assets(total_shares)` ≈ that NAV (not the stale cash figure). Use the existing Predict test harness pattern from `studio_tests.move`.
 - [ ] **Step 2: Run → FAIL** (`nav` signature today takes no oracle/predict).
 - [ ] **Step 3: Implement** `marked_position_value<Q>(predict, oracle, pos, clock): u64` that loops the position's legs and sums `predict::get_range_trade_amounts(...).1` (bid×qty) for ranges and `predict::get_trade_amounts(...).1` for binaries; change `nav` to `idle_value + marked_position_value(...)` when `open` is some, else idle. Update `roll_into_strategy` to set `accounted_assets = idle_after + marked_value` at roll time, and re-mark on each NAV read.

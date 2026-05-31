@@ -165,6 +165,7 @@ module predict_studio::vault_tests {
             &mut ctx,
         );
         assert!(vault::pending_assets(&v) == 2_000_000, 0);
+        vault::set_strategy_open_for_testing(&mut v, false);
         vault::process_pending(&mut v);
         assert!(vault::current_epoch(&v) == 1, 1);
         assert!(vault::claimable_shares(&v) > 0, 2);
@@ -173,6 +174,29 @@ module predict_studio::vault_tests {
         assert!(coin::value(&claimed) > 0, 3);
         assert!(vault::claimable_shares(&v) == 0, 4);
 
+        coin::burn_for_testing(initial);
+        coin::burn_for_testing(claimed);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test, expected_failure(abort_code = 13)]
+    fun process_pending_rejects_open_strategy_epoch() {
+        let mut ctx = tx_context::dummy();
+        let mut v = vault::new_for_testing(&mut ctx);
+        let initial = vault::deposit(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            &mut ctx,
+        );
+        let receipt = vault::request_deposit(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(2_000_000, &mut ctx),
+            &mut ctx,
+        );
+        vault::set_strategy_open_for_testing(&mut v, true);
+        vault::process_pending(&mut v);
+
+        let claimed = vault::claim(&mut v, receipt, &mut ctx);
         coin::burn_for_testing(initial);
         coin::burn_for_testing(claimed);
         vault::destroy_for_testing(v);
