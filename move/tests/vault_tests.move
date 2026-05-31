@@ -204,6 +204,21 @@ module predict_studio::vault_tests {
         vault::destroy_for_testing(v);
     }
 
+    #[test, expected_failure(abort_code = 14)]
+    fun withdraw_rejects_open_strategy_epoch() {
+        let mut ctx = tx_context::dummy();
+        let mut v = vault::new_for_testing(&mut ctx);
+        let shares = vault::deposit(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            &mut ctx,
+        );
+        vault::set_strategy_open_for_testing(&mut v, true);
+        let assets = vault::withdraw(&mut v, shares, &mut ctx);
+        coin::burn_for_testing(assets);
+        vault::destroy_for_testing(v);
+    }
+
     #[test]
     fun deposit_with_publisher_splits_capped_fee_and_preserves_zero_fee_path() {
         let mut ctx = tx_context::dummy();

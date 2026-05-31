@@ -32,6 +32,7 @@ module predict_studio::vault {
     const EWrongManagerEscrow: u64 = 11;
     const EBadManagerOwner: u64 = 12;
     const EStrategyAlreadyOpen: u64 = 13;
+    const EStrategyOpenWithdrawLocked: u64 = 14;
 
     const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
@@ -287,6 +288,7 @@ module predict_studio::vault {
     }
 
     public fun withdraw<Q>(v: &mut StructuredVault<Q>, s: Coin<STUDIO_LP>, ctx: &mut TxContext): Coin<Q> {
+        assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyOpenWithdrawLocked);
         let shares = coin::value(&s);
         let assets = to_assets(v, shares);
         coin::burn(&mut v.share_treasury, s);
