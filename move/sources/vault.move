@@ -479,6 +479,7 @@ module predict_studio::vault {
     public fun keeper_roll<Q>(v: &mut StructuredVault<Q>, cap: &KeeperCap, budget: u64) {
         assert!(cap.vault_id == object::id(v), ENotKeeper);
         assert!(budget <= cap.max_budget, EBudgetTooHigh);
+        assert!(balance::value(&v.pending) <= budget, EBudgetTooHigh);
         v.strategy_open = false;
         process_pending(v);
     }

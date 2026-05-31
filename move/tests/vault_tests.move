@@ -278,10 +278,29 @@ module predict_studio::vault_tests {
         );
         let cap = vault::grant_keeper(&v, 1_000_000, &mut ctx);
 
-        vault::keeper_roll(&mut v, &cap, 500_000);
+        vault::keeper_roll(&mut v, &cap, 1_000_000);
         let claimed = vault::claim(&mut v, receipt, &mut ctx);
         assert!(coin::value(&claimed) > 0, 0);
 
+        coin::burn_for_testing(claimed);
+        vault::destroy_keeper_for_testing(cap);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test, expected_failure(abort_code = 9)]
+    fun keeper_roll_rejects_pending_assets_above_budget() {
+        let mut ctx = tx_context::dummy();
+        let mut v = vault::new_for_testing(&mut ctx);
+        let receipt = vault::request_deposit(
+            &mut v,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+            &mut ctx,
+        );
+        let cap = vault::grant_keeper(&v, 1_000_000, &mut ctx);
+
+        vault::keeper_roll(&mut v, &cap, 500_000);
+
+        let claimed = vault::claim(&mut v, receipt, &mut ctx);
         coin::burn_for_testing(claimed);
         vault::destroy_keeper_for_testing(cap);
         vault::destroy_for_testing(v);
