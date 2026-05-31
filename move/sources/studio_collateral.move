@@ -1,5 +1,8 @@
 module predict_studio::studio_collateral {
-    use predict_studio::{studio_lp::STUDIO_LP, vault::DUSDC_T};
+    use predict_studio::{
+        studio_lp::STUDIO_LP,
+        vault::{Self as vault, DUSDC_T},
+    };
     use sui::{
         balance::{Self, Balance},
         coin::{Self, Coin},
@@ -16,6 +19,8 @@ module predict_studio::studio_collateral {
     const ENotOwner: u64 = 5;
     const EStillDebt: u64 = 6;
     const EOverRepay: u64 = 7;
+    const EFloorTooHigh: u64 = 8;
+    const EVaultNotIdle: u64 = 9;
 
     public struct CollateralMarket has key, store {
         id: UID,
@@ -55,6 +60,7 @@ module predict_studio::studio_collateral {
 
     public fun open_position(
         market: &mut CollateralMarket,
+        vault: &vault::StructuredVault<DUSDC_T>,
         collateral: Coin<STUDIO_LP>,
         floor_value: u64,
         ctx: &mut TxContext,
@@ -62,6 +68,11 @@ module predict_studio::studio_collateral {
         let shares = coin::value(&collateral);
         assert!(shares > 0, EZeroCollateral);
         assert!(floor_value > 0, EZeroFloor);
+        assert!(
+            !vault::strategy_is_open(vault) && !vault::has_open_position(vault) && vault::manager_cash(vault) == 0,
+            EVaultNotIdle,
+        );
+        assert!(floor_value <= vault::share_value(vault, shares), EFloorTooHigh);
         balance::join(&mut market.locked_collateral, coin::into_balance(collateral));
         BorrowPosition {
             id: object::new(ctx),

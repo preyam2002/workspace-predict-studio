@@ -22,7 +22,7 @@ module predict_studio::studio_collateral_tests {
             &mut market,
             coin::mint_for_testing<vault::DUSDC_T>(10_000_000, &mut ctx),
         );
-        let mut position = studio_collateral::open_position(&mut market, s, 800_000, &mut ctx);
+        let mut position = studio_collateral::open_position(&mut market, &v, s, 800_000, &mut ctx);
 
         assert!(studio_collateral::borrow_capacity(&position, &market) == 400_000, 0);
         let borrowed = studio_collateral::borrow(&mut market, &mut position, 300_000, &mut ctx);
@@ -46,9 +46,34 @@ module predict_studio::studio_collateral_tests {
             &mut market,
             coin::mint_for_testing<vault::DUSDC_T>(10_000_000, &mut ctx),
         );
-        let mut position = studio_collateral::open_position(&mut market, s, 800_000, &mut ctx);
+        let mut position = studio_collateral::open_position(&mut market, &v, s, 800_000, &mut ctx);
         let borrowed = studio_collateral::borrow(&mut market, &mut position, 400_001, &mut ctx);
         studio_collateral::repay(&mut market, &mut position, borrowed);
+        let returned = studio_collateral::close(&mut market, position, &mut ctx);
+        coin::burn_for_testing(returned);
+        studio_collateral::destroy_for_testing(market);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test, expected_failure(abort_code = 8)]
+    fun open_position_rejects_floor_above_vault_share_value() {
+        let mut ctx = tx_context::dummy();
+        let (v, s) = share(&mut ctx);
+        let mut market = studio_collateral::new_for_testing(5_000, &mut ctx);
+        let position = studio_collateral::open_position(&mut market, &v, s, 1_000_001, &mut ctx);
+        let returned = studio_collateral::close(&mut market, position, &mut ctx);
+        coin::burn_for_testing(returned);
+        studio_collateral::destroy_for_testing(market);
+        vault::destroy_for_testing(v);
+    }
+
+    #[test, expected_failure(abort_code = 9)]
+    fun open_position_rejects_non_idle_vault_floor() {
+        let mut ctx = tx_context::dummy();
+        let (mut v, s) = share(&mut ctx);
+        let mut market = studio_collateral::new_for_testing(5_000, &mut ctx);
+        vault::set_strategy_open_for_testing(&mut v, true);
+        let position = studio_collateral::open_position(&mut market, &v, s, 800_000, &mut ctx);
         let returned = studio_collateral::close(&mut market, position, &mut ctx);
         coin::burn_for_testing(returned);
         studio_collateral::destroy_for_testing(market);

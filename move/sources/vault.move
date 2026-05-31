@@ -125,6 +125,8 @@ module predict_studio::vault {
 
     public fun manager_cash<Q>(v: &StructuredVault<Q>): u64 { v.manager_cash }
 
+    public fun share_value<Q>(v: &StructuredVault<Q>, shares: u64): u64 { to_assets(v, shares) }
+
     public fun escrow_vault_id(escrow: &ManagerEscrow): ID { escrow.vault_id }
 
     public fun escrow_manager_id(escrow: &ManagerEscrow): ID { escrow.manager_id }

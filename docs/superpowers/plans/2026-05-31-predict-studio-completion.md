@@ -65,7 +65,7 @@ These are bugs the test suite missed because the asserts were weak. They must be
 
 **Problem:** `open_position` takes `floor_value` as caller-supplied — a curator can over-state the floor and borrow beyond recoverable collateral; no liquidation path.
 
-- [ ] **Fix:** derive `floor_value` on-chain from the escrowed `StructuredPosition`'s provable worst-case (`studio::max_loss`/min redemption), not caller input; add a `EFloorTooHigh` guard. Document "liquidation-light: borrow ≤ LTV·provable_floor" honestly. Test + commit `fix(collateral): derive floor from provable position min, reject caller-inflated floor`.
+- [x] **Fix:** bound `floor_value` on-chain against `vault::share_value` for the supplied `Coin<STUDIO_LP>` and reject non-idle vault shares (`strategy_open`, stored open position, or manager cash) until P0.1 marked NAV is implemented. Added `EFloorTooHigh` / `EVaultNotIdle` tests and documented "liquidation-light: borrow ≤ LTV·provable_floor" honestly. Commit `fix(collateral): reject inflated floor values`.
 
 ### P0.6 — Code-consistency fixes (from doc/source drift)
 

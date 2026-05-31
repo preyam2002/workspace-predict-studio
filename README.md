@@ -15,7 +15,7 @@ Predict Studio turns raw Predict binary/range instruments into trader-facing pay
   - `studio_lp.move` creates the real `STUDIO_LP` currency and publish-time share factory.
   - `vault.move` consumes that factory to create/share a depositable vault, mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, capped publisher fees, signer-owned PredictManager escrow binding, and an escrow-backed strategy roll path.
   - `pt_yt.move` splits vault shares into PT/YT and conserves redemption value through the maturity waterfall.
-  - `studio_collateral.move` is an isolated dUSDC lending market against the provable floor of `Coin<STUDIO_LP>`.
+  - `studio_collateral.move` is an isolated dUSDC lending market against idle, vault-valued `Coin<STUDIO_LP>` collateral; borrowing is capped at `LTV * provable_floor`, and open-strategy vault shares are rejected until marked NAV settlement is wired.
   - `rfq.move` verifies Ed25519 signatures over canonical BCS quote bytes, binds quotes to the canonical structure hash, enforces TTL, prevents replay, and exposes an atomic `fill_quote` path.
   - `note_kiosk.move` wraps bespoke notes as Kiosk-tradeable objects with a production TransferPolicy helper, capped royalty rule, and locked-sale enforcement.
 - TypeScript engine in `lib/`
