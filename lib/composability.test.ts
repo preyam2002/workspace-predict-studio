@@ -17,7 +17,7 @@ import {
   normalizePythFeedId,
   pythNavAnchor,
 } from './pyth';
-import { getWalrusJson, hashWalrusPayload, putWalrusJson } from './walrus';
+import { WALRUS_TESTNET_AGGREGATOR, WALRUS_TESTNET_PUBLISHER, getWalrusJson, hashWalrusPayload, putWalrusJson } from './walrus';
 
 describe('composability helpers', () => {
   it('builds and posts sponsored transaction requests', async () => {
@@ -253,16 +253,26 @@ describe('composability helpers', () => {
     const payload = { name: 'Range Coupon', strategy: 'fixed_coupon_range', target: { g: [0, 1] } };
     expect(hashWalrusPayload(payload)).toBe(hashWalrusPayload({ target: { g: [0, 1] }, strategy: 'fixed_coupon_range', name: 'Range Coupon' }));
 
-    const put = await putWalrusJson('https://walrus.example/v1/blobs', payload, async () => {
-      return new Response(JSON.stringify({ blobId: 'blob', hash: 'hash' }), { status: 200 });
+    const put = await putWalrusJson('https://publisher.example', payload, async (url, init) => {
+      expect(String(url)).toBe('https://publisher.example/v1/blobs?epochs=5');
+      expect(init?.method).toBe('PUT');
+      expect(init?.headers).toEqual({ 'content-type': 'application/json', 'x-content-sha256': hashWalrusPayload(payload) });
+      return new Response(JSON.stringify({ newlyCreated: { blobObject: { blobId: 'blob' } } }), { status: 200 });
     });
-    expect(put).toEqual({ blobId: 'blob', hash: 'hash' });
+    expect(put).toEqual({ blobId: 'blob', hash: hashWalrusPayload(payload) });
 
-    const got = await getWalrusJson<typeof payload>('https://walrus.example/v1/blobs', 'blob', async (url) => {
-      expect(String(url)).toBe('https://walrus.example/v1/blobs/blob');
+    const certified = await putWalrusJson('https://publisher.example', payload, async () => {
+      return new Response(JSON.stringify({ alreadyCertified: { blobId: 'existing' } }), { status: 200 });
+    });
+    expect(certified.blobId).toBe('existing');
+
+    const got = await getWalrusJson<typeof payload>('https://aggregator.example', 'blob', async (url) => {
+      expect(String(url)).toBe('https://aggregator.example/v1/blobs/blob');
       return new Response(JSON.stringify(payload), { status: 200 });
     });
     expect(got.name).toBe(payload.name);
+    expect(WALRUS_TESTNET_PUBLISHER).toContain('publisher.walrus-testnet');
+    expect(WALRUS_TESTNET_AGGREGATOR).toContain('aggregator.walrus-testnet');
   });
 
   it('caps builder fees and ranks publisher volume', () => {

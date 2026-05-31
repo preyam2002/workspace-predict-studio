@@ -137,9 +137,9 @@ Testnet constants (verify at pyth.network feed-ids#sui-testnet): Hermes `https:/
 
 Testnet (free, no wallet): publisher `https://publisher.walrus-testnet.walrus.space`, aggregator `https://aggregator.walrus-testnet.walrus.space`.
 
-- [ ] **Store:** `PUT ${PUBLISHER}/v1/blobs?epochs=5` → branch the response: `json.newlyCreated?.blobObject?.blobId ?? json.alreadyCertified?.blobId`.
-- [ ] **Read:** `GET ${AGGREGATOR}/v1/blobs/${blobId}`. Render the payoff diagram + backtest from the blob.
-- [ ] **Commit** `feat(walrus): store/read self-describing payoff specs (testnet HTTP)`.
+- [x] **Store:** `PUT ${PUBLISHER}/v1/blobs?epochs=5` → branch the response: `json.newlyCreated?.blobObject?.blobId ?? json.alreadyCertified?.blobId`. Added `putWalrusJson` + `/api/walrus` POST.
+- [x] **Read:** `GET ${AGGREGATOR}/v1/blobs/${blobId}`. Added `getWalrusJson` + `/api/walrus?blobId=...`; UI rendering from a blob remains a P1.5/P2 polish task.
+- [x] **Commit** `feat(walrus): store/read self-describing payoff specs (testnet HTTP)`.
 
 > **Gotcha:** mainnet has no free publisher — keep the endpoint in config so the mainnet story is a config flip, not a rewrite.
 

@@ -83,6 +83,8 @@ NEXT_PUBLIC_CETUS_STUDIO_POOL_ID=0x... # optional; app labels the fallback as mo
 NEXT_PUBLIC_DUSDC_COIN_ID=0x...        # optional deposit button coin object
 NEXT_PUBLIC_STUDIO_LP_COIN_ID=0x...    # optional withdraw button coin object
 NEXT_PUBLIC_PENDING_RECEIPT_ID=0x...   # optional queued-deposit claim receipt
+NEXT_PUBLIC_WALRUS_PUBLISHER=https://publisher.walrus-testnet.walrus.space
+NEXT_PUBLIC_WALRUS_AGGREGATOR=https://aggregator.walrus-testnet.walrus.space
 ```
 
 ## Live Commands
