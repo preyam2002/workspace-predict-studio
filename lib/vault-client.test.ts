@@ -75,6 +75,22 @@ describe('VaultClient', () => {
     expect(rollCall?.typeArguments).toEqual([ids.quoteType]);
   });
 
+  it('builds a manager funding transaction from vault idle assets', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildFundManagerTx({
+      vaultId: ids.vaultId,
+      managerEscrowId: '0x5',
+      managerId: '0x7',
+      quoteType: ids.quoteType,
+      amount: 400_000,
+    });
+
+    const call = tx.getData().commands[0].MoveCall;
+    expect(call?.module).toBe('vault');
+    expect(call?.function).toBe('fund_manager_from_idle');
+    expect(call?.typeArguments).toEqual([ids.quoteType]);
+  });
+
   it('reads NAV from a devInspect u64 return value', async () => {
     const client = new VaultClient(
       {

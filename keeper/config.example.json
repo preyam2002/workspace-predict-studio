@@ -7,6 +7,7 @@
   "managerEscrowId": "0x...",
   "predictId": "0x...",
   "managerId": "0x...",
+  "fundAmount": 500000,
   "quantity": 1000000,
   "maxLossBudget": 500000,
   "shape": "auto_range",

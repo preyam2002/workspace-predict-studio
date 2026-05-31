@@ -91,6 +91,7 @@ describe('keeper roll planning', () => {
         managerEscrowId: '0x00000000000000000000000000000000000000000000000000000000000000cc',
         predictId: oracle.predictId,
         managerId: '0x00000000000000000000000000000000000000000000000000000000000000dd',
+        fundAmount: 500_000,
         quantity: 1_000_000,
         maxLossBudget: 500_000,
       },
@@ -99,6 +100,7 @@ describe('keeper roll planning', () => {
 
     const functions = roll.tx?.getData().commands.flatMap((command) => command.MoveCall?.function ?? []);
     expect(functions).toContain('keeper_roll');
+    expect(functions).toContain('fund_manager_from_idle');
     expect(functions).toContain('roll_into_strategy');
   });
 });

@@ -346,6 +346,42 @@ module predict_studio::vault_tests {
         scenario.end();
     }
 
+    #[test]
+    fun vault_funds_escrowed_manager_from_idle_assets() {
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(admin);
+        let manager_id;
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut v = vault::new_for_testing(scenario.ctx());
+            let shares = vault::deposit(
+                &mut v,
+                coin::mint_for_testing<vault::DUSDC_T>(1_000_000, scenario.ctx()),
+                scenario.ctx(),
+            );
+            let mut manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+
+            vault::fund_manager_from_idle(&mut v, &escrow, &mut manager, 400_000, scenario.ctx());
+
+            assert!(manager.balance<vault::DUSDC_T>() == 400_000, 0);
+            assert!(vault::manager_cash(&v) == 400_000, 1);
+            assert!(vault::accounted_assets(&v) == 1_000_000, 2);
+
+            let funded = manager.withdraw<vault::DUSDC_T>(400_000, scenario.ctx());
+            coin::burn_for_testing(funded);
+            coin::burn_for_testing(shares);
+            vault::destroy_manager_escrow_for_testing(escrow);
+            test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
     #[test, expected_failure(abort_code = 11)]
     fun vault_rejects_strategy_position_from_wrong_manager() {
         let admin = @0xA;

@@ -54,6 +54,7 @@ module predict_studio::vault {
         claim_shares: u64,
         strategy_open: bool,
         open: Option<StructuredPosition>,
+        manager_cash: u64,
         strategy: String,
     }
 
@@ -121,6 +122,8 @@ module predict_studio::vault {
         }
     }
 
+    public fun manager_cash<Q>(v: &StructuredVault<Q>): u64 { v.manager_cash }
+
     public fun escrow_vault_id(escrow: &ManagerEscrow): ID { escrow.vault_id }
 
     public fun escrow_manager_id(escrow: &ManagerEscrow): ID { escrow.manager_id }
@@ -178,6 +181,7 @@ module predict_studio::vault {
             claim_shares: 0,
             strategy_open: false,
             open: option::none(),
+            manager_cash: 0,
             strategy,
         }
     }
@@ -424,6 +428,19 @@ module predict_studio::vault {
         v.strategy_open = true;
     }
 
+    public fun fund_manager_from_idle<Q>(
+        v: &mut StructuredVault<Q>,
+        escrow: &ManagerEscrow,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        amount: u64,
+        ctx: &mut TxContext,
+    ) {
+        assert_escrowed_manager(v, escrow, manager, ctx);
+        let c = coin::take(&mut v.idle, amount, ctx);
+        manager.deposit<Q>(c, ctx);
+        v.manager_cash = v.manager_cash + amount;
+    }
+
     public fun roll_into_strategy<Q>(
         v: &mut StructuredVault<Q>,
         escrow: &ManagerEscrow,
@@ -437,6 +454,7 @@ module predict_studio::vault {
         ctx: &mut TxContext,
     ) {
         assert_escrowed_manager(v, escrow, manager, ctx);
+        let balance_before = manager.balance<Q>();
         let pos = studio::build_and_mint<Q>(
             predict,
             manager,
@@ -447,6 +465,12 @@ module predict_studio::vault {
             clock,
             ctx,
         );
+        let spent = balance_before - manager.balance<Q>();
+        if (spent >= v.manager_cash) {
+            v.manager_cash = 0;
+        } else {
+            v.manager_cash = v.manager_cash - spent;
+        };
         record_open_position(v, escrow, manager, pos, ctx);
     }
 
@@ -514,6 +538,7 @@ module predict_studio::vault {
             claim_shares: _,
             strategy_open: _,
             open,
+            manager_cash: _,
             strategy: _,
         } = v;
         balance::destroy_for_testing(idle);

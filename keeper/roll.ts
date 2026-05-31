@@ -32,6 +32,7 @@ export interface KeeperConfig extends DeltaBand {
   managerEscrowId?: string;
   predictId?: string;
   managerId?: string;
+  fundAmount?: number;
   quantity?: number;
   maxLossBudget?: number;
   shape?: string;
@@ -116,6 +117,7 @@ export function buildKeeperRollDryRun(config: KeeperConfig, oracle: OracleState)
     config.managerEscrowId !== undefined ||
     config.predictId !== undefined ||
     config.managerId !== undefined ||
+    config.fundAmount !== undefined ||
     config.quantity !== undefined ||
     config.maxLossBudget !== undefined;
   const hasStrategy =
@@ -134,6 +136,7 @@ export function buildKeeperRollDryRun(config: KeeperConfig, oracle: OracleState)
         keeperCapId: config.keeperCapId,
         quoteType: config.quoteType,
         budget: config.budget,
+        fundAmount: config.fundAmount,
         managerEscrowId: config.managerEscrowId!,
         predictId: config.predictId!,
         managerId: config.managerId!,

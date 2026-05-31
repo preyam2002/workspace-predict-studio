@@ -169,7 +169,7 @@ async function main() {
   }
 
   if (!managerAbilities.includes('store')) {
-    console.log('vault_manager_gate\tblocked\tPredictManager lacks store ability; vault-owned manager needs an escrow/support path');
+    console.log('vault_manager_gate\tdirect_vault_owned_blocked\tPredictManager lacks store; use ManagerEscrow + fund_manager_from_idle + roll_into_strategy');
   }
 }
 

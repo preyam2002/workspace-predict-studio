@@ -40,9 +40,18 @@ export interface RollIntoStrategyParams {
   maxLossBudget: number;
 }
 
+export interface FundManagerParams {
+  vaultId: string;
+  managerEscrowId: string;
+  managerId: string;
+  quoteType: string;
+  amount: number;
+}
+
 export interface KeeperRollIntoStrategyParams extends RollIntoStrategyParams {
   keeperCapId: string;
   budget: number;
+  fundAmount?: number;
 }
 
 export class VaultClient {
@@ -171,6 +180,12 @@ export class VaultClient {
     return tx;
   }
 
+  buildFundManagerTx(params: FundManagerParams): Transaction {
+    const tx = new Transaction();
+    this.addFundManager(tx, params);
+    return tx;
+  }
+
   buildKeeperRollIntoStrategyTx(params: KeeperRollIntoStrategyParams): Transaction {
     const tx = new Transaction();
     const vault = tx.object(params.vaultId);
@@ -179,8 +194,24 @@ export class VaultClient {
       typeArguments: [params.quoteType],
       arguments: [vault, tx.object(params.keeperCapId), tx.pure.u64(params.budget)],
     });
+    if (params.fundAmount && params.fundAmount > 0) {
+      this.addFundManager(tx, { ...params, amount: params.fundAmount }, vault);
+    }
     this.addRollIntoStrategy(tx, params, vault);
     return tx;
+  }
+
+  private addFundManager(tx: Transaction, params: FundManagerParams, vault = tx.object(params.vaultId)) {
+    tx.moveCall({
+      target: `${this.pkg}::vault::fund_manager_from_idle`,
+      typeArguments: [params.quoteType],
+      arguments: [
+        vault,
+        tx.object(params.managerEscrowId),
+        tx.object(params.managerId),
+        tx.pure.u64(params.amount),
+      ],
+    });
   }
 
   private addRollIntoStrategy(tx: Transaction, params: RollIntoStrategyParams, vault = tx.object(params.vaultId)) {
