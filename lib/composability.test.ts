@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { navDiscountPct, quoteConstantProductExit } from './cetus';
 import { builderFee, capacityCappedBuilderFee, rankPublishers } from './creator';
-import { buildSponsoredTransactionRequest, requestSponsoredTransaction, sponsorConfigFromEnv } from './enoki';
+import { buildSponsoredTransactionRequest, enokiAuthProvidersFromEnv, requestSponsoredTransaction, sponsorConfigFromEnv } from './enoki';
 import { pythNavAnchor } from './pyth';
 import { getWalrusJson, hashWalrusPayload, putWalrusJson } from './walrus';
 
@@ -19,6 +19,15 @@ describe('composability helpers', () => {
       return new Response(JSON.stringify({ digest: '0xdigest' }), { status: 200 });
     });
     expect(res.digest).toBe('0xdigest');
+  });
+
+  it('builds Enoki auth provider config from public env only when configured', () => {
+    expect(enokiAuthProvidersFromEnv({})).toBeUndefined();
+    expect(
+      enokiAuthProvidersFromEnv({
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'google-client',
+      }),
+    ).toEqual({ google: { clientId: 'google-client' } });
   });
 
   it('normalizes Pyth prices and flags stale anchors', () => {

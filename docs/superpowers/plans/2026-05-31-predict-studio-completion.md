@@ -86,7 +86,7 @@ All four mesh clients import no SDK; two UI panels are static. The research belo
 
 **Files:** add `@mysten/enoki`; `app/providers.tsx`, `lib/enoki.ts`, `app/api/sponsor/route.ts`, `app/api/execute/route.ts`, `app/components/MintButton.tsx`.
 
-- [ ] **Step 1 — register Enoki wallets before WalletProvider** in `providers.tsx`:
+- [x] **Step 1 — register Enoki wallets before WalletProvider** in `providers.tsx`:
 
 ```tsx
 import { isEnokiNetwork, registerEnokiWallets } from '@mysten/enoki';

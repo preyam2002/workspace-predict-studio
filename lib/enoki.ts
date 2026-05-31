@@ -17,6 +17,18 @@ export interface SponsoredTransactionResponse {
   sponsoredTxBytes?: string;
 }
 
+export interface EnokiAuthProviders {
+  google: { clientId: string };
+}
+
+export function enokiAuthProvidersFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): EnokiAuthProviders | undefined {
+  const googleClientId = env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  if (!googleClientId) return undefined;
+  return { google: { clientId: googleClientId } };
+}
+
 export function sponsorConfigFromEnv(env: Record<string, string | undefined> = process.env): SponsorConfig | undefined {
   const sponsorUrl = env.NEXT_PUBLIC_ENOKI_SPONSOR_URL;
   if (!sponsorUrl) return undefined;
