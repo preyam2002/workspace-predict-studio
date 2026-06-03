@@ -5,6 +5,12 @@ export interface TrancheIds {
   recipient: string;
 }
 
+export interface SettleTrancheParams {
+  trancheVaultId: string;
+  vaultId: string;
+  oracleId: string;
+}
+
 export class TrancheClient {
   constructor(private readonly pkg: string) {}
 
@@ -45,6 +51,15 @@ export class TrancheClient {
       arguments: [tx.object(ids.trancheVaultId), tx.object(ytCoinId)],
     });
     tx.transferObjects([assets], tx.pure.address(ids.recipient));
+    return tx;
+  }
+
+  buildSettleTx(params: SettleTrancheParams): Transaction {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${this.pkg}::pt_yt::settle_tranche`,
+      arguments: [tx.object(params.trancheVaultId), tx.object(params.vaultId), tx.object(params.oracleId), tx.object('0x6')],
+    });
     return tx;
   }
 }

@@ -165,3 +165,48 @@ export function greeksUp(svi: SVI, forward: number, strike: number, tauYears: nu
   const theta = tauYears > 1e-6 ? -price / (tauYears * 365) : 0;
   return { price, delta, vega, theta };
 }
+
+export interface BasketGreeks {
+  mark: number;
+  delta: number;
+  gamma: number;
+  vega: number;
+  theta: number;
+}
+
+function markLeg(leg: Leg, svi: SVI, forward: number): number {
+  return legProb(svi, forward, leg) * leg.quantity;
+}
+
+export function greeksLeg(svi: SVI, forward: number, leg: Leg, tauYears: number): BasketGreeks {
+  const mark = markLeg(leg, svi, forward);
+  const dF = Math.max(1, Math.abs(forward) * 1e-4);
+  const up = markLeg(leg, svi, forward + dF);
+  const down = markLeg(leg, svi, forward - dF);
+  const volBump = 1e-4;
+  const bumped = markLeg(leg, { ...svi, sigma: svi.sigma + volBump }, forward);
+
+  return {
+    mark,
+    delta: (up - down) / (2 * dF),
+    gamma: (up - 2 * mark + down) / (dF * dF),
+    vega: (bumped - mark) / volBump,
+    theta: tauYears > 1e-6 ? -mark / (tauYears * 365) : 0,
+  };
+}
+
+export function basketGreeks(legs: Leg[], svi: SVI, forward: number, tauYears: number): BasketGreeks {
+  return legs.reduce(
+    (sum, leg) => {
+      const next = greeksLeg(svi, forward, leg, tauYears);
+      return {
+        mark: sum.mark + next.mark,
+        delta: sum.delta + next.delta,
+        gamma: sum.gamma + next.gamma,
+        vega: sum.vega + next.vega,
+        theta: sum.theta + next.theta,
+      };
+    },
+    { mark: 0, delta: 0, gamma: 0, vega: 0, theta: 0 },
+  );
+}

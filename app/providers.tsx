@@ -6,10 +6,13 @@ import { getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { enokiAuthProvidersFromEnv } from '@/lib/enoki';
+import { getAppNetworkConfig } from '@/lib/network-config';
 import '@mysten/dapp-kit/dist/index.css';
 
+const appConfig = getAppNetworkConfig();
 const networks = {
   testnet: { url: getJsonRpcFullnodeUrl('testnet'), network: 'testnet' as const },
+  mainnet: { url: appConfig.rpcUrl ?? getJsonRpcFullnodeUrl('mainnet'), network: 'mainnet' as const },
 };
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -17,7 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networks} defaultNetwork="testnet">
+      <SuiClientProvider networks={networks} defaultNetwork={appConfig.network}>
         <RegisterEnokiWallets />
         <WalletProvider autoConnect>{children}</WalletProvider>
       </SuiClientProvider>

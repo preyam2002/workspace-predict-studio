@@ -7,6 +7,8 @@ import { TrancheClient, type TrancheIds } from '@/lib/tranche-client';
 
 const STUDIO_PACKAGE = process.env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE ?? '0x0';
 const TRANCHE_VAULT_ID = process.env.NEXT_PUBLIC_TRANCHE_VAULT_ID;
+const VAULT_ID = process.env.NEXT_PUBLIC_VAULT_ID;
+const ORACLE_ID = process.env.NEXT_PUBLIC_ORACLE_ID;
 const SHARE_COIN_ID = process.env.NEXT_PUBLIC_STUDIO_LP_COIN_ID;
 const PT_COIN_ID = process.env.NEXT_PUBLIC_PT_COIN_ID;
 const YT_COIN_ID = process.env.NEXT_PUBLIC_YT_COIN_ID;
@@ -39,16 +41,18 @@ export function TranchePanel() {
     refetchInterval: 30_000,
   });
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
-  const run = (kind: 'split' | 'merge' | 'redeem_pt' | 'redeem_yt') => {
+  const run = (kind: 'split' | 'merge' | 'settle' | 'redeem_pt' | 'redeem_yt') => {
     if (!ids) return;
     const transaction =
       kind === 'split'
         ? SHARE_COIN_ID && client.buildSplitTx(ids, SHARE_COIN_ID)
         : kind === 'merge'
           ? PT_COIN_ID && YT_COIN_ID && client.buildMergeTx(ids, PT_COIN_ID, YT_COIN_ID)
-          : kind === 'redeem_pt'
-            ? PT_COIN_ID && client.buildRedeemPtTx(ids, PT_COIN_ID)
-            : YT_COIN_ID && client.buildRedeemYtTx(ids, YT_COIN_ID);
+          : kind === 'settle'
+            ? VAULT_ID && ORACLE_ID && client.buildSettleTx({ trancheVaultId: ids.trancheVaultId, vaultId: VAULT_ID, oracleId: ORACLE_ID })
+            : kind === 'redeem_pt'
+              ? PT_COIN_ID && client.buildRedeemPtTx(ids, PT_COIN_ID)
+              : YT_COIN_ID && client.buildRedeemYtTx(ids, YT_COIN_ID);
     if (transaction) signAndExecute({ transaction });
   };
 
@@ -87,6 +91,9 @@ export function TranchePanel() {
         </button>
         <button className="icon-button" disabled={isPending || !ids || !PT_COIN_ID || !YT_COIN_ID} onClick={() => run('merge')} type="button">
           Merge
+        </button>
+        <button className="icon-button" disabled={isPending || !ids || !VAULT_ID || !ORACLE_ID} onClick={() => run('settle')} type="button">
+          Settle
         </button>
         <button className="icon-button" disabled={isPending || !ids || !PT_COIN_ID} onClick={() => run('redeem_pt')} type="button">
           Redeem PT

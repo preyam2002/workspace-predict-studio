@@ -45,4 +45,28 @@ module predict_studio::studio_tests {
             0,
         );
     }
+
+    #[test]
+    fun replicated_payout_matches_target_payoff_property_grid() {
+        let legs = vector[
+            studio::new_leg(true, false, 90, 110, 1_000_000),
+            studio::new_leg(false, true, 115, 0, 500_000),
+        ];
+
+        let mut settlement = 70;
+        while (settlement <= 130) {
+            let expected = if (settlement > 90 && settlement <= 110) {
+                1_000_000
+            } else {
+                0
+            };
+            let expected = if (settlement > 115) {
+                expected + 500_000
+            } else {
+                expected
+            };
+            assert!(studio::payout_at_settlement(&legs, settlement) == expected, settlement);
+            settlement = settlement + 5;
+        };
+    }
 }

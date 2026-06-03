@@ -91,17 +91,64 @@ describe('VaultClient', () => {
     expect(call?.typeArguments).toEqual([ids.quoteType]);
   });
 
+  it('builds a keeper settlement transaction', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildKeeperSettleTx({
+      vaultId: ids.vaultId,
+      keeperCapId: '0x5',
+      managerEscrowId: '0x6',
+      quoteType: ids.quoteType,
+      predictId: '0x7',
+      managerId: '0x8',
+      oracleId: '0x9',
+    });
+
+    const call = tx.getData().commands[0].MoveCall;
+    expect(call?.module).toBe('vault');
+    expect(call?.function).toBe('keeper_settle');
+    expect(call?.typeArguments).toEqual([ids.quoteType]);
+  });
+
   it('reads NAV from a devInspect u64 return value', async () => {
     const client = new VaultClient(
       {
-        devInspectTransactionBlock: async () => ({
-          results: [{ returnValues: [[[0x40, 0x42, 0x0f, 0, 0, 0, 0, 0], 'u64']] }],
-        }),
+        devInspectTransactionBlock: async (input: {
+          transactionBlock: { getData: () => { commands: Array<{ MoveCall?: { function?: string } }> } };
+        }) => {
+          const { transactionBlock } = input;
+          const call = transactionBlock.getData().commands[0].MoveCall;
+          expect(call?.function).toBe('nav');
+          return {
+            results: [{ returnValues: [[[0x40, 0x42, 0x0f, 0, 0, 0, 0, 0], 'u64']] }],
+          };
+        },
       } as never,
       '0x4',
     );
 
-    await expect(client.readNav(ids.vaultId, ids.quoteType, ids.recipient)).resolves.toBe(1_000_000);
+    await expect(client.readNav(ids.vaultId, ids.quoteType, '0x2', '0x3', ids.recipient)).resolves.toBe(1_000_000);
+  });
+
+  it('reads marked share value from a devInspect u64 return value', async () => {
+    const client = new VaultClient(
+      {
+        devInspectTransactionBlock: async (input: {
+          transactionBlock: { getData: () => { commands: Array<{ MoveCall?: { function?: string } }> } };
+        }) => {
+          const { transactionBlock } = input;
+          const call = transactionBlock.getData().commands[0].MoveCall;
+          expect(call?.function).toBe('share_value_marked');
+          return {
+            results: [{ returnValues: [[[0x40, 0x42, 0x0f, 0, 0, 0, 0, 0], 'u64']] }],
+          };
+        },
+      } as never,
+      '0x4',
+    );
+
+    await expect(
+      client.readShareValueMarked(ids.vaultId, ids.quoteType, 500_000, '0x2', '0x3', ids.recipient),
+    ).resolves.toBe(1_000_000);
   });
 
   it('reads one-share value from a devInspect u64 return value', async () => {

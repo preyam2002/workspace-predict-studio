@@ -1,3 +1,5 @@
+import { getAppNetworkConfig } from './network-config';
+
 export interface PoolReserves {
   reserveIn: number;
   reserveOut: number;
@@ -106,11 +108,12 @@ export function studioLpCoinType(packageId: string): string {
 }
 
 export function cetusMarketConfigFromEnv(env: CetusMarketEnv): CetusMarketConfig | undefined {
-  const poolId = env.NEXT_PUBLIC_CETUS_STUDIO_POOL_ID;
+  const appConfig = getAppNetworkConfig(env);
+  const poolId = env.NEXT_PUBLIC_CETUS_STUDIO_POOL_ID ?? appConfig.cetusStudioPoolId;
   const baseCoinType =
     env.NEXT_PUBLIC_CETUS_BASE_COIN_TYPE ??
-    (env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE ? studioLpCoinType(env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE) : undefined);
-  const quoteCoinType = env.NEXT_PUBLIC_CETUS_QUOTE_COIN_TYPE ?? env.NEXT_PUBLIC_DUSDC_TYPE;
+    (appConfig.predictStudioPackage !== '0x0' ? studioLpCoinType(appConfig.predictStudioPackage) : undefined);
+  const quoteCoinType = env.NEXT_PUBLIC_CETUS_QUOTE_COIN_TYPE ?? appConfig.dusdcType;
   if (!poolId || !baseCoinType || !quoteCoinType) return undefined;
   return {
     poolId,
@@ -118,7 +121,7 @@ export function cetusMarketConfigFromEnv(env: CetusMarketEnv): CetusMarketConfig
     quoteCoinType,
     baseDecimals: Number(env.NEXT_PUBLIC_CETUS_BASE_DECIMALS ?? 6),
     quoteDecimals: Number(env.NEXT_PUBLIC_CETUS_QUOTE_DECIMALS ?? 6),
-    env: env.NEXT_PUBLIC_SUI_NETWORK === 'mainnet' ? 'mainnet' : 'testnet',
+    env: appConfig.network,
   };
 }
 

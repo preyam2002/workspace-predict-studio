@@ -37,8 +37,18 @@ export function VaultMarket({ oracle }: { oracle?: OracleState }) {
     refetchInterval: 30_000,
   });
   const shareValueQuery = useQuery({
-    queryKey: ['vault-share-value', STUDIO_PACKAGE, VAULT_ID, DUSDC_TYPE, account?.address],
-    queryFn: () => vaultClient.readShareValue(VAULT_ID!, DUSDC_TYPE!, SHARE_UNIT, account?.address ?? DEVINSPECT_SENDER),
+    queryKey: ['vault-share-value', STUDIO_PACKAGE, VAULT_ID, DUSDC_TYPE, oracle?.predictId, oracle?.oracleId, account?.address],
+    queryFn: () =>
+      oracle
+        ? vaultClient.readShareValueMarked(
+            VAULT_ID!,
+            DUSDC_TYPE!,
+            SHARE_UNIT,
+            oracle.predictId,
+            oracle.oracleId,
+            account?.address ?? DEVINSPECT_SENDER,
+          )
+        : vaultClient.readShareValue(VAULT_ID!, DUSDC_TYPE!, SHARE_UNIT, account?.address ?? DEVINSPECT_SENDER),
     enabled: liveConfigured,
     refetchInterval: 30_000,
   });

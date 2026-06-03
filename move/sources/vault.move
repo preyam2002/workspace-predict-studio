@@ -33,6 +33,7 @@ module predict_studio::vault {
     const EBadManagerOwner: u64 = 12;
     const EStrategyAlreadyOpen: u64 = 13;
     const EStrategyOpenWithdrawLocked: u64 = 14;
+    const ENoOpenStrategy: u64 = 15;
 
     const MAX_PUBLISHER_FEE_BPS: u64 = 10;
 
@@ -109,7 +110,18 @@ module predict_studio::vault {
 
     public fun hwm_pps_num<Q>(v: &StructuredVault<Q>): u128 { v.hwm_pps_num }
 
-    public fun nav<Q>(v: &StructuredVault<Q>): u64 { v.accounted_assets }
+    public fun nav<Q>(
+        v: &StructuredVault<Q>,
+        predict: &deepbook_predict::predict::Predict,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        clock: &Clock,
+    ): u64 {
+        if (option::is_some(&v.open)) {
+            v.accounted_assets + studio::marked_value(predict, oracle, option::borrow(&v.open), clock)
+        } else {
+            v.accounted_assets
+        }
+    }
 
     public fun strategy_is_open<Q>(v: &StructuredVault<Q>): bool { v.strategy_open }
 
@@ -127,6 +139,16 @@ module predict_studio::vault {
 
     public fun share_value<Q>(v: &StructuredVault<Q>, shares: u64): u64 { to_assets(v, shares) }
 
+    public fun share_value_marked<Q>(
+        v: &StructuredVault<Q>,
+        shares: u64,
+        predict: &deepbook_predict::predict::Predict,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        clock: &Clock,
+    ): u64 {
+        to_assets_at_nav(v, shares, nav(v, predict, oracle, clock))
+    }
+
     public fun escrow_vault_id(escrow: &ManagerEscrow): ID { escrow.vault_id }
 
     public fun escrow_manager_id(escrow: &ManagerEscrow): ID { escrow.manager_id }
@@ -140,18 +162,24 @@ module predict_studio::vault {
     }
 
     fun to_assets<Q>(v: &StructuredVault<Q>, shares: u64): u64 {
-        let num = (shares as u128) * ((v.accounted_assets as u128) + 1);
+        to_assets_at_nav(v, shares, v.accounted_assets)
+    }
+
+    fun to_assets_at_nav<Q>(v: &StructuredVault<Q>, shares: u64, nav: u64): u64 {
+        let num = (shares as u128) * ((nav as u128) + 1);
         let den = (v.total_shares as u128) + SHARE_OFFSET;
         (num / den) as u64
     }
 
-    fun pps_num<Q>(v: &StructuredVault<Q>): u128 {
+    fun pps_num_at_nav<Q>(v: &StructuredVault<Q>, nav: u64): u128 {
         if (v.total_shares == 0) {
             0
         } else {
-            ((v.accounted_assets as u128) * PPS_SCALE) / (v.total_shares as u128)
+            ((nav as u128) * PPS_SCALE) / (v.total_shares as u128)
         }
     }
+
+    fun pps_num<Q>(v: &StructuredVault<Q>): u128 { pps_num_at_nav(v, v.accounted_assets) }
 
     fun ratchet_initial_hwm<Q>(v: &mut StructuredVault<Q>) {
         if (v.hwm_pps_num == 0 && v.total_shares > 0) {
@@ -247,6 +275,7 @@ module predict_studio::vault {
     }
 
     public fun deposit<Q>(v: &mut StructuredVault<Q>, c: Coin<Q>, ctx: &mut TxContext): Coin<STUDIO_LP> {
+        assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyAlreadyOpen);
         let amt = coin::value(&c);
         assert!(amt >= v.min_deposit, EBelowMinDeposit);
 
@@ -361,7 +390,24 @@ module predict_studio::vault {
     }
 
     public fun crystallize_fee<Q>(v: &mut StructuredVault<Q>, ctx: &mut TxContext): Coin<STUDIO_LP> {
-        let current = pps_num(v);
+        assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyAlreadyOpen);
+        let current_nav = v.accounted_assets;
+        crystallize_fee_at_nav(v, current_nav, ctx)
+    }
+
+    public fun crystallize_fee_marked<Q>(
+        v: &mut StructuredVault<Q>,
+        predict: &deepbook_predict::predict::Predict,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): Coin<STUDIO_LP> {
+        let current_nav = nav(v, predict, oracle, clock);
+        crystallize_fee_at_nav(v, current_nav, ctx)
+    }
+
+    fun crystallize_fee_at_nav<Q>(v: &mut StructuredVault<Q>, nav: u64, ctx: &mut TxContext): Coin<STUDIO_LP> {
+        let current = pps_num_at_nav(v, nav);
         if (v.total_shares == 0 || current <= v.hwm_pps_num || v.performance_fee_bps == 0) {
             return coin::mint(&mut v.share_treasury, 0, ctx)
         };
@@ -369,13 +415,13 @@ module predict_studio::vault {
         let gain_assets =
             ((current - v.hwm_pps_num) * (v.total_shares as u128) / PPS_SCALE) as u64;
         let fee_assets = gain_assets * v.performance_fee_bps / 10_000;
-        if (fee_assets == 0 || fee_assets >= v.accounted_assets) {
+        if (fee_assets == 0 || fee_assets >= nav) {
             v.hwm_pps_num = current;
             return coin::mint(&mut v.share_treasury, 0, ctx)
         };
 
         let fee_shares =
-            (((fee_assets as u128) * (v.total_shares as u128)) / ((v.accounted_assets - fee_assets) as u128)) as u64;
+            (((fee_assets as u128) * (v.total_shares as u128)) / ((nav - fee_assets) as u128)) as u64;
         v.total_shares = v.total_shares + fee_shares;
         v.hwm_pps_num = current;
         coin::mint(&mut v.share_treasury, fee_shares, ctx)
@@ -471,6 +517,7 @@ module predict_studio::vault {
             ctx,
         );
         let spent = balance_before - manager.balance<Q>();
+        v.accounted_assets = v.accounted_assets - spent;
         if (spent >= v.manager_cash) {
             v.manager_cash = 0;
         } else {
@@ -485,6 +532,36 @@ module predict_studio::vault {
         assert!(balance::value(&v.pending) <= budget, EBudgetTooHigh);
         assert!(!v.strategy_open && !option::is_some(&v.open), EStrategyAlreadyOpen);
         process_pending(v);
+    }
+
+    public fun keeper_settle<Q>(
+        v: &mut StructuredVault<Q>,
+        cap: &KeeperCap,
+        escrow: &ManagerEscrow,
+        predict: &mut deepbook_predict::predict::Predict,
+        manager: &mut deepbook_predict::predict_manager::PredictManager,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(cap.vault_id == object::id(v), ENotKeeper);
+        assert_escrowed_manager(v, escrow, manager, ctx);
+        assert!(v.strategy_open && option::is_some(&v.open), ENoOpenStrategy);
+
+        let before = manager.balance<Q>();
+        let mut pos = option::extract(&mut v.open);
+        studio::settle<Q>(predict, manager, oracle, &mut pos, clock, ctx);
+        let payout = manager.balance<Q>() - before;
+        studio::destroy_settled(pos);
+
+        v.accounted_assets = v.accounted_assets + payout;
+        v.manager_cash = v.manager_cash + payout;
+        if (v.manager_cash > 0) {
+            let cash = manager.withdraw<Q>(v.manager_cash, ctx);
+            balance::join(&mut v.idle, coin::into_balance(cash));
+            v.manager_cash = 0;
+        };
+        v.strategy_open = false;
     }
 
     #[test_only]

@@ -4,7 +4,7 @@
 
 **One-liner pitch:** *The structured-note factory & marketplace on DeepBook Predict — describe your market view in English, get a fairly-priced defined-risk note, buy it gasless.*
 
-**Current state (2026-05-31):** Offline build complete and test-green (Move 40/40, vitest passing, tsc + next build clean). Engine, all Move modules, mesh integrations, and the AI front-door are coded. **The gate to winning is now testnet tokens → live deploy → demo.** Detailed specs live in `docs/superpowers/plans/2026-05-31-predict-studio-completion.md`.
+**Current state (2026-06-01):** Offline build complete and test-green (Move 44/44, vitest 93/93, tsc + next build clean). Engine, all Move modules, mesh integrations, AI front-door, greeks/payoff analytics, mobile buy-lane PWA, mainnet config shim, and replication property tests are coded. **The gate to winning is now testnet tokens → live deploy → demo.** Detailed specs live in `docs/superpowers/plans/2026-05-31-predict-studio-completion.md`.
 
 ---
 
@@ -18,37 +18,37 @@
 
 ---
 
-## P0 — Correctness (finish the bug fixes) · offline
+## P0 — Correctness · offline
 
-Safety fixes landed (commits `54b6bba`, `9ffa197`, `66783ca`, collateral floor, `create_manager`). Remaining:
-- [ ] **Full oracle-marked NAV** (P0.1 steps 3–5): `nav = idle + Σ bid_value(open legs)` via `predict::get_trade_amounts`, not cash-only. The deposit/withdraw lock is a band-aid; this is the real fix. Needed before vault demo is honest.
-- [ ] **PT/YT production settlement** (P0.4): real `settle_tranche` reading `oracle.is_settled()` (only `settle_for_testing` exists today) + conservation test.
-- [ ] **`keeper_settle`** follow-up: on-chain settle when oracle settled, clear position before next roll.
-- [ ] Re-run `donation` + HWM tests against the new marked-NAV basis.
+Safety fixes landed (commits `54b6bba`, `9ffa197`, `66783ca`, collateral floor, `create_manager`). Correctness pass now complete locally:
+- [x] **Full oracle-marked NAV** (P0.1 steps 3–5): `nav = accounted cash + Σ bid_value(open legs)` via `predict::get_trade_amounts` / `get_range_trade_amounts`, not cash-only.
+- [x] **PT/YT production settlement** (P0.4): real `settle_tranche` gated on `oracle.is_settled()` + conservation test.
+- [x] **`keeper_settle`** follow-up: on-chain settle when oracle settled, clear position before next roll.
+- [x] Re-run `donation` + HWM tests against the new marked-NAV basis.
 
-## P1 — Integrations: scaffold → REAL · mostly coded, NEEDS LIVE VERIFICATION
+## P1 — Integrations: scaffold → REAL · mostly coded, partly live-verified
 
 Commits landed for all four; each still needs a live testnet smoke test + real config:
 - [x] Enoki zkLogin wallet registration + sponsored gasless mint (`7e71ef8`, `c0a267c`) — [ ] **verify live:** provision 2 Portal keys (public client / private backend), Google OAuth client, allowlist `studio::build_and_mint_to_sender`.
-- [x] Pyth live BTC NAV anchor (`50b91a0`) — [ ] **verify live:** confirm testnet BTC/USD feed `0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b` + hermes-beta returns price.
-- [x] Cetus STUDIO_LP/dUSDC secondary market (`be3ea95`) — [ ] **verify live:** confirm Cetus CLMM package is actually deployed on Sui **testnet** (it may not be — fall back to a labeled mock panel if absent).
-- [x] Walrus note-spec storage (`66783ca`) — [ ] **verify live:** PUT/GET against `publisher/aggregator.walrus-testnet.walrus.space`.
+- [x] Pyth live BTC NAV anchor (`50b91a0`) — [x] **verify live:** Hermes BTC/USD feed `0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b` returned a fresh parsed price.
+- [x] Cetus STUDIO_LP/dUSDC secondary market (`be3ea95`) — [x] **verify live:** Cetus CLMM is deployed on Sui testnet (`0x5372...2db8`, sample pool `0xa8b0...d9da`).
+- [x] Walrus note-spec storage (`66783ca`) — [x] **verify live:** PUT/GET round-tripped blob `BMyqzjaNLWUYqnJ8BPmvtA_nluACEzsolV3bmI7fGb8`.
 - [x] VaultMarket + TranchePanel wired to clients (`33e3226`) — [ ] click-through with a real wallet.
 - [x] Test hardening (`819d11a`).
-- [ ] **Code-drift cleanup:** confirm `setup-manager.ts` uses `predict::create_manager`; delete dead indexer routes; read `maxStrike` from oracle not heuristic.
+- [x] **Code-drift cleanup:** `setup-manager.ts` uses `predict::create_manager`; dead indexer route assumptions removed from code; `maxStrike` prefers oracle `max_strike` when exposed.
 
 ## P2 — High-value features (anti-bloat, ranked) · partly done
 
-- [x] **#1 NL "describe view → structured note" AI assistant** (`1bdf31b`) — [ ] polish the demo copy + guard rails (LLM output constrained to DSL, never negative `g`, ≤8 legs). **This is the hero demo beat.**
-- [ ] **#2 Per-note greeks + payoff/PnL diagram** (~2d): aggregate Δ/Γ/Vega/Θ off the SVI surface (`greeksUp` exists). Cheap technical-axis depth.
-- [ ] **#3 Gasless zkLogin buy-lane PWA** (~4–5d, trimmed): mobile-responsive buy-a-note flow only, reusing IntentBar + Enoki sponsor. Not a second builder.
-- [ ] **#4 Mainnet-migration shim + 1 Margin composition** (~1–2d): config flip testnet→mainnet (targets the 50% mainnet prize) + one `deepbook_margin` compose if the path exists (verify first).
-- [ ] **#5 Replication = payoff settlement property test** (~1–2d): random notes × random settlement → on-chain payout == target payoff. Defends the technical core.
+- [x] **#1 NL "describe view → structured note" AI assistant** (`1bdf31b`): demo copy now includes premium/max-loss/max-gain, and server guard rails force non-negative `g` + ≤8-leg replication.
+- [x] **#2 Per-note greeks + payoff/PnL diagram:** aggregate Δ/Γ/Vega/Θ off the SVI surface and render payoff extrema/breakevens.
+- [x] **#3 Gasless zkLogin buy-lane PWA:** `/buy` mobile lane reuses IntentBar + gasless Enoki mint toggle, with installable manifest.
+- [x] **#4 Mainnet-migration shim:** network-scoped config flips testnet↔mainnet IDs in one place; `deepbook_margin` composition is explicitly disabled until a verified compose target exists.
+- [x] **#5 Replication = payoff settlement property test:** deterministic sampled catalog notes + Move settlement grid assert replicated payout equals target payoff.
 - **CUT (do not build):** points flywheel, copy-trading, portfolio VaR, any new on-chain primitive. Keep only the creator leaderboard as demo dressing.
 
 ## P3 — Live / token-gated · blocked on tokens
 
-- [ ] `pnpm verify:first` — resolve remaining unknowns live (`create_manager` sig/event, `devInspect` decoding, escrow-backed roll, manager `&mut`-in-PTB).
+- [ ] `pnpm verify:first` — latest shell run confirms current oracle/devInspect/create_manager/manager-ability seams; still needs funded escrow-backed roll proof.
 - [ ] `pnpm bench` — gas benchmark vs 5M cap → set solver `maxLegs` from the measured budget (currently guessed at 8).
 - [ ] Deploy all packages; create + fund a `PredictManager`; create a vault; `seed-vaults.ts` for real on-chain demo vaults.
 - [ ] Full e2e: vault → gasless deposit → roll Iron Condor → settle → redeem; record all digests. Validate the escrow-backed roll path (the one architectural risk).
@@ -67,7 +67,7 @@ Commits landed for all four; each still needs a live testnet smoke test + real c
 | Week | Focus |
 |---|---|
 | **1 (now)** | Request tokens **today** · finish P0 marked-NAV + PT/YT settlement · deploy + first live mint the moment tokens arrive (P3.1–P3.3) |
-| **2** | Live-verify all P1 integrations · P2.2 greeks · polish P2.1 AI assistant · P2.4 mainnet shim |
-| **3** | P2.3 PWA · P2.5 property test · P3.4 full e2e + digests · P4 video + README · submit (2-day buffer) |
+| **2** | Live-verify all P1 integrations · deploy/fund once tokens arrive |
+| **3** | P3.4 full e2e + digests · P4 video + README · submit (2-day buffer) |
 
 **Critical-path reminder:** everything in P0/P1/P2 is offline-doable now; **P3 unlocks the win-half of the prize and is gated only on tokens.** Submit the token request first.

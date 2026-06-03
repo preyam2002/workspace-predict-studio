@@ -76,6 +76,7 @@ export function IntentBar({
         <div className="surface mt-3 grid gap-2 px-3 py-2 text-sm md:grid-cols-[1fr_auto_auto] md:items-center">
           <span>You're buying: {activeEcho}</span>
           {quote ? <span className="warn-text">Premium {usd(quote.totalCost)}</span> : null}
+          {quote ? <span>Max loss {usd(quote.maxLoss)}</span> : null}
           {quote ? <span className="good-text">Max gain {usd(quote.maxGain)}</span> : null}
         </div>
       ) : null}

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildCatalogTarget, type CatalogProductId } from '@/lib/catalog';
 import { decompose } from '@/lib/decompose';
 import { getPublisherLeaderboard } from '@/lib/indexer';
+import { getAppNetworkConfig } from '@/lib/network-config';
 import { optimize, optimizeSparse } from '@/lib/optimizer';
 import { breakevens, ev, legProb, maxGain } from '@/lib/payoff';
 import { PredictClient, loadOracleState } from '@/lib/predict-client';
@@ -19,6 +20,7 @@ import { CreatorLeaderboard } from './CreatorLeaderboard';
 import { DrawPayoffCanvas, defaultDrawTarget } from './DrawPayoffCanvas';
 import { IntentBar } from './IntentBar';
 import { MintButton } from './MintButton';
+import { NoteAnalyticsPanel } from './NoteAnalyticsPanel';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
 import { PortfolioPanel } from './PortfolioPanel';
@@ -30,7 +32,8 @@ import { TemplatePicker, defaultTemplate } from './TemplatePicker';
 import { TranchePanel } from './TranchePanel';
 import { VaultMarket } from './VaultMarket';
 
-const STUDIO_PACKAGE = process.env.NEXT_PUBLIC_PREDICT_STUDIO_PACKAGE ?? '0x0';
+const appConfig = getAppNetworkConfig();
+const STUDIO_PACKAGE = appConfig.predictStudioPackage;
 
 function withScenario(oracle: OracleState, scenario: Scenario): OracleState {
   return {
@@ -58,8 +61,13 @@ export function Builder() {
   const account = useCurrentAccount();
   const [scenario, setScenario] = useState<Scenario>({ spotShiftPct: 0, volShiftPct: 0 });
   const oracleQuery = useQuery({
-    queryKey: ['oracle-state'],
-    queryFn: () => loadOracleState(sui),
+    queryKey: ['oracle-state', appConfig.oracleId, appConfig.managerId, appConfig.dusdcType],
+    queryFn: () =>
+      loadOracleState(sui, {
+        oracleId: appConfig.oracleId,
+        managerId: appConfig.managerId,
+        dusdcType: appConfig.dusdcType,
+      }),
   });
   const publisherQuery = useQuery({
     queryKey: ['publisher-leaderboard', STUDIO_PACKAGE],
@@ -81,7 +89,7 @@ export function Builder() {
   const [quoteSource, setQuoteSource] = useState('local SVI estimate');
   const [digest, setDigest] = useState<string | undefined>();
   const client = useMemo(
-    () => new PredictClient(sui, STUDIO_PACKAGE, oracle?.dbpPackage ?? process.env.NEXT_PUBLIC_DEEPBOOK_PREDICT_PACKAGE ?? '0x0'),
+    () => new PredictClient(sui, STUDIO_PACKAGE, oracle?.dbpPackage ?? appConfig.deepbookPredictPackage),
     [sui, oracle?.dbpPackage],
   );
 
@@ -260,6 +268,7 @@ export function Builder() {
 
           <div className="grid content-start gap-4">
             <StructureSummary quote={quote} quoteSource={quoteSource} />
+            {quote ? <NoteAnalyticsPanel oracle={oracle} legs={quote.legs} premium={quote.totalCost} /> : null}
             {sparseTarget ? <SolverInspector oracle={oracle} target={sparseTarget} /> : null}
             <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} oracle={oracle} />
             <TranchePanel />

@@ -2,10 +2,129 @@
 module predict_studio::vault_tests {
     use predict_studio::studio;
     use predict_studio::vault;
-    use deepbook_predict::{predict, predict_manager::PredictManager};
+    use deepbook_predict::{
+        i64,
+        market_key,
+        oracle::{Self as oracle, OracleSVI, OracleSVICap},
+        plp::PLP,
+        predict::{Self as predict, Predict},
+        predict_manager::PredictManager,
+        registry::{Self as predict_registry, AdminCap, Registry},
+    };
     use std::string;
     use sui::test_scenario::{Self as test_scenario};
-    use sui::{coin, object, tx_context};
+    use sui::{clock, coin, coin_registry, object, transfer, tx_context};
+
+    public struct TEST_USDC has key {
+        id: UID,
+    }
+
+    fun create_test_currency(scenario: &mut test_scenario::Scenario, owner: address) {
+        let mut coin_registry_obj = coin_registry::create_coin_data_registry_for_testing(scenario.ctx());
+        let (currency_init, treasury_cap) = coin_registry::new_currency<TEST_USDC>(
+            &mut coin_registry_obj,
+            6,
+            string::utf8(b"tUSDC"),
+            string::utf8(b"Test USDC"),
+            string::utf8(b"test quote"),
+            string::utf8(b""),
+            scenario.ctx(),
+        );
+        let metadata_cap = coin_registry::finalize(currency_init, scenario.ctx());
+        coin_registry::share_for_testing(coin_registry_obj);
+        transfer::public_transfer(treasury_cap, owner);
+        transfer::public_transfer(metadata_cap, owner);
+    }
+
+    fun create_predict_and_oracle(
+        scenario: &mut test_scenario::Scenario,
+        admin: address,
+    ): (ID, ID) {
+        let registry_id;
+        scenario.next_tx(admin);
+        {
+            registry_id = predict_registry::init_for_testing(scenario.ctx());
+        };
+
+        let predict_id;
+        scenario.next_tx(admin);
+        {
+            let mut registry = scenario.take_shared_by_id<Registry>(registry_id);
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let currency = scenario.take_shared<coin_registry::Currency<TEST_USDC>>();
+            let clock_obj = clock::create_for_testing(scenario.ctx());
+            predict_id = predict_registry::create_predict<TEST_USDC>(
+                &mut registry,
+                &admin_cap,
+                &currency,
+                coin::create_treasury_cap_for_testing<PLP>(scenario.ctx()),
+                &clock_obj,
+                scenario.ctx(),
+            );
+            clock_obj.destroy_for_testing();
+            scenario.return_to_sender(admin_cap);
+            test_scenario::return_shared(currency);
+            test_scenario::return_shared(registry);
+        };
+
+        let oracle_id;
+        scenario.next_tx(admin);
+        {
+            let mut registry = scenario.take_shared_by_id<Registry>(registry_id);
+            let mut predict = scenario.take_shared_by_id<Predict>(predict_id);
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let oracle_cap = predict_registry::create_oracle_cap(&admin_cap, scenario.ctx());
+            oracle_id = predict_registry::create_oracle(
+                &mut registry,
+                &mut predict,
+                &admin_cap,
+                &oracle_cap,
+                string::utf8(b"BTC"),
+                100_000,
+                10_000,
+                10_000,
+                scenario.ctx(),
+            );
+            scenario.return_to_sender(admin_cap);
+            transfer::public_transfer(oracle_cap, admin);
+            test_scenario::return_shared(predict);
+            test_scenario::return_shared(registry);
+        };
+
+        (predict_id, oracle_id)
+    }
+
+    fun activate_oracle(
+        scenario: &mut test_scenario::Scenario,
+        admin: address,
+        oracle_id: ID,
+    ) {
+        scenario.next_tx(admin);
+        {
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let oracle_cap = scenario.take_from_sender<OracleSVICap>();
+            let mut oracle = scenario.take_shared_by_id<OracleSVI>(oracle_id);
+            let clock_obj = clock::create_for_testing(scenario.ctx());
+            predict_registry::register_oracle_cap(&mut oracle, &admin_cap, &oracle_cap);
+            oracle::activate(&mut oracle, &oracle_cap, &clock_obj);
+            oracle::update_prices(
+                &mut oracle,
+                &oracle_cap,
+                oracle::new_price_data(100_000, 100_000),
+                &clock_obj,
+            );
+            oracle::update_svi(
+                &mut oracle,
+                &oracle_cap,
+                oracle::new_svi_params(40_000_000, 100_000_000, i64::zero(), i64::zero(), 200_000_000),
+                &clock_obj,
+            );
+            clock_obj.destroy_for_testing();
+            scenario.return_to_sender(admin_cap);
+            scenario.return_to_sender(oracle_cap);
+            test_scenario::return_shared(oracle);
+        };
+    }
 
     #[test]
     fun factory_creates_depositable_production_vault() {
@@ -360,6 +479,274 @@ module predict_studio::vault_tests {
             vault::destroy_keeper_for_testing(cap);
             vault::destroy_manager_escrow_for_testing(escrow);
             test_scenario::return_shared(manager);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
+    #[test]
+    fun nav_marks_open_strategy_position_with_predict_bid() {
+        let system = @0x0;
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(system);
+        {
+            let mut coin_registry_obj = coin_registry::create_coin_data_registry_for_testing(scenario.ctx());
+            let (currency_init, treasury_cap) = coin_registry::new_currency<TEST_USDC>(
+                &mut coin_registry_obj,
+                6,
+                string::utf8(b"tUSDC"),
+                string::utf8(b"Test USDC"),
+                string::utf8(b"test quote"),
+                string::utf8(b""),
+                scenario.ctx(),
+            );
+            let metadata_cap = coin_registry::finalize(currency_init, scenario.ctx());
+            coin_registry::share_for_testing(coin_registry_obj);
+            transfer::public_transfer(treasury_cap, system);
+            transfer::public_transfer(metadata_cap, system);
+        };
+
+        let registry_id;
+        scenario.next_tx(admin);
+        {
+            registry_id = predict_registry::init_for_testing(scenario.ctx());
+        };
+
+        let predict_id;
+        scenario.next_tx(admin);
+        {
+            let mut registry = scenario.take_shared_by_id<Registry>(registry_id);
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let currency = scenario.take_shared<coin_registry::Currency<TEST_USDC>>();
+            let clock_obj = clock::create_for_testing(scenario.ctx());
+            predict_id = predict_registry::create_predict<TEST_USDC>(
+                &mut registry,
+                &admin_cap,
+                &currency,
+                coin::create_treasury_cap_for_testing<PLP>(scenario.ctx()),
+                &clock_obj,
+                scenario.ctx(),
+            );
+            clock_obj.destroy_for_testing();
+            scenario.return_to_sender(admin_cap);
+            test_scenario::return_shared(currency);
+            test_scenario::return_shared(registry);
+        };
+
+        let oracle_id;
+        scenario.next_tx(admin);
+        {
+            let mut registry = scenario.take_shared_by_id<Registry>(registry_id);
+            let mut predict = scenario.take_shared_by_id<Predict>(predict_id);
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let oracle_cap = predict_registry::create_oracle_cap(&admin_cap, scenario.ctx());
+            oracle_id = predict_registry::create_oracle(
+                &mut registry,
+                &mut predict,
+                &admin_cap,
+                &oracle_cap,
+                string::utf8(b"BTC"),
+                100_000,
+                10_000,
+                10_000,
+                scenario.ctx(),
+            );
+            scenario.return_to_sender(admin_cap);
+            transfer::public_transfer(oracle_cap, admin);
+            test_scenario::return_shared(predict);
+            test_scenario::return_shared(registry);
+        };
+
+        scenario.next_tx(admin);
+        {
+            let admin_cap = scenario.take_from_sender<AdminCap>();
+            let oracle_cap = scenario.take_from_sender<OracleSVICap>();
+            let mut oracle = scenario.take_shared_by_id<OracleSVI>(oracle_id);
+            let clock_obj = clock::create_for_testing(scenario.ctx());
+            predict_registry::register_oracle_cap(&mut oracle, &admin_cap, &oracle_cap);
+            oracle::activate(&mut oracle, &oracle_cap, &clock_obj);
+            oracle::update_prices(
+                &mut oracle,
+                &oracle_cap,
+                oracle::new_price_data(100_000, 100_000),
+                &clock_obj,
+            );
+            oracle::update_svi(
+                &mut oracle,
+                &oracle_cap,
+                oracle::new_svi_params(40_000_000, 100_000_000, i64::zero(), i64::zero(), 200_000_000),
+                &clock_obj,
+            );
+            clock_obj.destroy_for_testing();
+            scenario.return_to_sender(admin_cap);
+            scenario.return_to_sender(oracle_cap);
+            test_scenario::return_shared(oracle);
+        };
+
+        let manager_id;
+        scenario.next_tx(admin);
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut predict = scenario.take_shared_by_id<Predict>(predict_id);
+            let oracle = scenario.take_shared_by_id<OracleSVI>(oracle_id);
+            let mut manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let clock_obj = clock::create_for_testing(scenario.ctx());
+            let mut v = vault::create_vault<TEST_USDC>(
+                vault::new_factory_for_testing(scenario.ctx()),
+                admin,
+                1,
+                1_000,
+                string::utf8(b"marked_nav"),
+                scenario.ctx(),
+            );
+            let shares = vault::deposit(
+                &mut v,
+                coin::mint_for_testing<TEST_USDC>(1_000_000, scenario.ctx()),
+                scenario.ctx(),
+            );
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            let plp = predict::supply<TEST_USDC>(
+                &mut predict,
+                coin::mint_for_testing<TEST_USDC>(5_000_000, scenario.ctx()),
+                &clock_obj,
+                scenario.ctx(),
+            );
+            coin::burn_for_testing(plp);
+
+            vault::fund_manager_from_idle(&mut v, &escrow, &mut manager, 500_000, scenario.ctx());
+            vault::roll_into_strategy(
+                &mut v,
+                &escrow,
+                &mut predict,
+                &mut manager,
+                &oracle,
+                string::utf8(b"digital_call"),
+                vector[studio::new_leg(false, true, 100_000, 0, 100_000)],
+                500_000,
+                &clock_obj,
+                scenario.ctx(),
+            );
+
+            let key = market_key::new(oracle::id(&oracle), oracle::expiry(&oracle), 100_000, true);
+            let (_, bid) = predict::get_trade_amounts(&predict, &oracle, key, 100_000, &clock_obj);
+            let expected = 500_000 + vault::manager_cash(&v) + bid;
+            let marked_nav = vault::nav(&v, &predict, &oracle, &clock_obj);
+            let share_nav = vault::share_value_marked(&v, vault::total_shares(&v), &predict, &oracle, &clock_obj);
+
+            assert!(marked_nav == expected, 0);
+            assert!(marked_nav != vault::accounted_assets(&v), 1);
+            assert!(share_nav <= marked_nav && marked_nav - share_nav <= 2, 2);
+
+            coin::burn_for_testing(shares);
+            vault::destroy_manager_escrow_for_testing(escrow);
+            clock_obj.destroy_for_testing();
+            test_scenario::return_shared(manager);
+            test_scenario::return_shared(oracle);
+            test_scenario::return_shared(predict);
+            vault::destroy_for_testing(v);
+        };
+        scenario.end();
+    }
+
+    #[test]
+    fun keeper_settle_clears_position_and_unblocks_next_roll() {
+        let system = @0x0;
+        let admin = @0xA;
+        let mut scenario = test_scenario::begin(system);
+        create_test_currency(&mut scenario, system);
+        let (predict_id, oracle_id) = create_predict_and_oracle(&mut scenario, admin);
+        activate_oracle(&mut scenario, admin, oracle_id);
+
+        let manager_id;
+        scenario.next_tx(admin);
+        {
+            manager_id = predict::create_manager(scenario.ctx());
+        };
+
+        scenario.next_tx(admin);
+        {
+            let mut predict = scenario.take_shared_by_id<Predict>(predict_id);
+            let mut oracle = scenario.take_shared_by_id<OracleSVI>(oracle_id);
+            let oracle_cap = scenario.take_from_sender<OracleSVICap>();
+            let mut manager = scenario.take_shared_by_id<PredictManager>(manager_id);
+            let mut clock_obj = clock::create_for_testing(scenario.ctx());
+            let mut v = vault::create_vault<TEST_USDC>(
+                vault::new_factory_for_testing(scenario.ctx()),
+                admin,
+                1,
+                1_000,
+                string::utf8(b"keeper_settle"),
+                scenario.ctx(),
+            );
+            let shares = vault::deposit(
+                &mut v,
+                coin::mint_for_testing<TEST_USDC>(1_000_000, scenario.ctx()),
+                scenario.ctx(),
+            );
+            let escrow = vault::create_manager_escrow(&v, &manager, scenario.ctx());
+            let cap = vault::grant_keeper(&v, 1_000_000, scenario.ctx());
+            let plp = predict::supply<TEST_USDC>(
+                &mut predict,
+                coin::mint_for_testing<TEST_USDC>(5_000_000, scenario.ctx()),
+                &clock_obj,
+                scenario.ctx(),
+            );
+            coin::burn_for_testing(plp);
+
+            vault::fund_manager_from_idle(&mut v, &escrow, &mut manager, 500_000, scenario.ctx());
+            vault::roll_into_strategy(
+                &mut v,
+                &escrow,
+                &mut predict,
+                &mut manager,
+                &oracle,
+                string::utf8(b"digital_call"),
+                vector[studio::new_leg(false, true, 100_000, 0, 100_000)],
+                500_000,
+                &clock_obj,
+                scenario.ctx(),
+            );
+
+            let accounted_before = vault::accounted_assets(&v);
+            clock::set_for_testing(&mut clock_obj, 100_000);
+            oracle::update_prices(
+                &mut oracle,
+                &oracle_cap,
+                oracle::new_price_data(120_000, 120_000),
+                &clock_obj,
+            );
+
+            vault::keeper_settle(
+                &mut v,
+                &cap,
+                &escrow,
+                &mut predict,
+                &mut manager,
+                &oracle,
+                &clock_obj,
+                scenario.ctx(),
+            );
+            vault::keeper_roll(&mut v, &cap, 0);
+
+            assert!(!vault::strategy_is_open(&v), 0);
+            assert!(!vault::has_open_position(&v), 1);
+            assert!(vault::manager_cash(&v) == 0, 2);
+            assert!(manager.balance<TEST_USDC>() == 0, 3);
+            assert!(vault::accounted_assets(&v) == accounted_before + 100_000, 4);
+
+            let assets = vault::withdraw(&mut v, shares, scenario.ctx());
+            coin::burn_for_testing(assets);
+            vault::destroy_keeper_for_testing(cap);
+            vault::destroy_manager_escrow_for_testing(escrow);
+            clock_obj.destroy_for_testing();
+            scenario.return_to_sender(oracle_cap);
+            test_scenario::return_shared(manager);
+            test_scenario::return_shared(oracle);
+            test_scenario::return_shared(predict);
             vault::destroy_for_testing(v);
         };
         scenario.end();

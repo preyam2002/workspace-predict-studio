@@ -31,6 +31,8 @@ export function PayoffChart({
     s: point.s,
     pnl: point.pnl / USDC,
   }));
+  const maxPnl = data.length > 0 ? Math.max(...data.map((point) => point.pnl)) : 0;
+  const minPnl = data.length > 0 ? Math.min(...data.map((point) => point.pnl)) : 0;
 
   useEffect(() => {
     const node = containerRef.current;
@@ -69,6 +71,8 @@ export function PayoffChart({
             contentStyle={{ background: '#10151d', border: '1px solid rgba(228,232,240,0.14)', borderRadius: 6 }}
           />
           <ReferenceLine y={0} stroke="rgba(228,232,240,0.55)" />
+          {maxPnl > 0 ? <ReferenceLine y={maxPnl} stroke="#3ddc97" strokeDasharray="2 4" /> : null}
+          {minPnl < 0 ? <ReferenceLine y={minPnl} stroke="#ff6b6b" strokeDasharray="2 4" /> : null}
           <ReferenceLine x={spot} stroke="#58a6ff" strokeDasharray="4 4" />
           {breakevens.map((point) => (
             <ReferenceLine key={point} x={point} stroke="#f6b44b" strokeDasharray="3 3" />

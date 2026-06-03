@@ -1,7 +1,11 @@
 module predict_studio::pt_yt {
-    use predict_studio::{studio_lp::STUDIO_LP, vault::DUSDC_T};
+    use predict_studio::{
+        studio_lp::STUDIO_LP,
+        vault::{Self as vault, DUSDC_T, StructuredVault},
+    };
     use sui::{
         balance::{Self, Balance},
+        clock::Clock,
         coin::{Self, Coin, TreasuryCap},
         object::{Self, UID},
         tx_context::TxContext,
@@ -12,6 +16,7 @@ module predict_studio::pt_yt {
     const EAlreadySettled: u64 = 3;
     const ENotSettled: u64 = 4;
     const EInsufficientPool: u64 = 5;
+    const EOracleNotSettled: u64 = 6;
 
     public struct PT has drop {}
     public struct YT has drop {}
@@ -24,6 +29,7 @@ module predict_studio::pt_yt {
         yt_treasury: TreasuryCap<YT>,
         total_split: u64,
         settlement_bps: u64,
+        settled_assets: u64,
         floor_bps: u64,
         settled: bool,
     }
@@ -63,8 +69,7 @@ module predict_studio::pt_yt {
     public fun redeem_pt(v: &mut TrancheVault, pt: Coin<PT>, ctx: &mut TxContext): Coin<DUSDC_T> {
         assert!(v.settled, ENotSettled);
         let amount = coin::value(&pt);
-        let claim_bps = min_u64(v.floor_bps, v.settlement_bps);
-        let claim = amount * claim_bps / 10_000;
+        let claim = pt_claim(v, amount);
         assert!(claim <= balance::value(&v.payout_pool), EInsufficientPool);
         coin::burn(&mut v.pt_treasury, pt);
         coin::take(&mut v.payout_pool, claim, ctx)
@@ -73,15 +78,23 @@ module predict_studio::pt_yt {
     public fun redeem_yt(v: &mut TrancheVault, yt: Coin<YT>, ctx: &mut TxContext): Coin<DUSDC_T> {
         assert!(v.settled, ENotSettled);
         let amount = coin::value(&yt);
-        let claim_bps = if (v.settlement_bps > v.floor_bps) {
-            v.settlement_bps - v.floor_bps
-        } else {
-            0
-        };
-        let claim = amount * claim_bps / 10_000;
+        let claim = yt_claim(v, amount);
         assert!(claim <= balance::value(&v.payout_pool), EInsufficientPool);
         coin::burn(&mut v.yt_treasury, yt);
         coin::take(&mut v.payout_pool, claim, ctx)
+    }
+
+    public fun settle_tranche(
+        v: &mut TrancheVault,
+        structured_vault: &mut StructuredVault<DUSDC_T>,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        _clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(oracle.is_settled(), EOracleNotSettled);
+        let shares = coin::from_balance(balance::withdraw_all(&mut v.locked_shares), ctx);
+        let payout = vault::withdraw(structured_vault, shares, ctx);
+        settle_with_payout(v, payout);
     }
 
     public fun total_split(v: &TrancheVault): u64 { v.total_split }
@@ -90,6 +103,45 @@ module predict_studio::pt_yt {
 
     fun min_u64(a: u64, b: u64): u64 {
         if (a < b) a else b
+    }
+
+    fun gross_claim(v: &TrancheVault, amount: u64): u64 {
+        if (v.total_split == 0) {
+            0
+        } else {
+            (((amount as u128) * (v.settled_assets as u128)) / (v.total_split as u128)) as u64
+        }
+    }
+
+    fun floor_claim(v: &TrancheVault, amount: u64): u64 {
+        (((amount as u128) * (v.floor_bps as u128)) / 10_000) as u64
+    }
+
+    fun pt_claim(v: &TrancheVault, amount: u64): u64 {
+        min_u64(floor_claim(v, amount), gross_claim(v, amount))
+    }
+
+    fun yt_claim(v: &TrancheVault, amount: u64): u64 {
+        let gross = gross_claim(v, amount);
+        let floor = floor_claim(v, amount);
+        if (gross > floor) {
+            gross - floor
+        } else {
+            0
+        }
+    }
+
+    fun settle_with_payout(v: &mut TrancheVault, payout: Coin<DUSDC_T>) {
+        assert!(!v.settled, EAlreadySettled);
+        let payout_value = coin::value(&payout);
+        v.settlement_bps = if (v.total_split == 0) {
+            0
+        } else {
+            (((payout_value as u128) * 10_000) / (v.total_split as u128)) as u64
+        };
+        v.settled_assets = payout_value;
+        balance::join(&mut v.payout_pool, coin::into_balance(payout));
+        v.settled = true;
     }
 
     #[test_only]
@@ -102,6 +154,7 @@ module predict_studio::pt_yt {
             yt_treasury: coin::create_treasury_cap_for_testing<YT>(ctx),
             total_split: 0,
             settlement_bps: 0,
+            settled_assets: 0,
             floor_bps,
             settled: false,
         }
@@ -109,15 +162,7 @@ module predict_studio::pt_yt {
 
     #[test_only]
     public fun settle_for_testing(v: &mut TrancheVault, payout: Coin<DUSDC_T>) {
-        assert!(!v.settled, EAlreadySettled);
-        let payout_value = coin::value(&payout);
-        v.settlement_bps = if (v.total_split == 0) {
-            0
-        } else {
-            payout_value * 10_000 / v.total_split
-        };
-        balance::join(&mut v.payout_pool, coin::into_balance(payout));
-        v.settled = true;
+        settle_with_payout(v, payout);
     }
 
     #[test_only]
@@ -130,6 +175,7 @@ module predict_studio::pt_yt {
             yt_treasury,
             total_split: _,
             settlement_bps: _,
+            settled_assets: _,
             floor_bps: _,
             settled: _,
         } = v;

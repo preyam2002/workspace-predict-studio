@@ -14,6 +14,7 @@ export function MintButton({
   shape,
   maxLossBudget,
   disabled,
+  defaultGasless = false,
   onMinted,
 }: {
   client: PredictClient;
@@ -22,13 +23,14 @@ export function MintButton({
   shape: string;
   maxLossBudget: number;
   disabled?: boolean;
+  defaultGasless?: boolean;
   onMinted: (digest: string) => void;
 }) {
   const account = useCurrentAccount();
   const sui = useSuiClient();
   const { mutate, isPending } = useSignAndExecuteTransaction();
   const { mutateAsync: signTransaction, isPending: isSigning } = useSignTransaction();
-  const [gasless, setGasless] = useState(false);
+  const [gasless, setGasless] = useState(defaultGasless);
   const [isGaslessPending, setIsGaslessPending] = useState(false);
   const pending = isPending || isSigning || isGaslessPending;
   const cannotMint = disabled || pending || legs.length === 0 || !oracle.managerId || !oracle.dusdcType || !account;

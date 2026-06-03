@@ -107,6 +107,35 @@ module predict_studio::studio {
         premium_paid * fee_bps / 10_000
     }
 
+    public fun marked_value(
+        predict: &deepbook_predict::predict::Predict,
+        oracle: &deepbook_predict::oracle::OracleSVI,
+        pos: &StructuredPosition,
+        clock: &Clock,
+    ): u64 {
+        use deepbook_predict::market_key;
+        use deepbook_predict::predict;
+        use deepbook_predict::range_key;
+
+        let mut total = 0;
+        let mut i = 0;
+        while (i < pos.legs.length()) {
+            let leg = &pos.legs[i];
+            let bid = if (leg.is_range) {
+                let key = range_key::new(pos.oracle_id, pos.expiry_ms, leg.lower_strike, leg.higher_strike);
+                let (_, bid) = predict::get_range_trade_amounts(predict, oracle, key, leg.quantity, clock);
+                bid
+            } else {
+                let key = market_key::new(pos.oracle_id, pos.expiry_ms, leg.lower_strike, leg.is_up);
+                let (_, bid) = predict::get_trade_amounts(predict, oracle, key, leg.quantity, clock);
+                bid
+            };
+            total = total + bid;
+            i = i + 1;
+        };
+        total
+    }
+
     /// Atomically mint every leg of a structure, enforce the worst-case-loss
     /// budget, and return one owned StructuredPosition.
     public fun build_and_mint<Quote>(
@@ -327,6 +356,10 @@ module predict_studio::studio {
         best
     }
 
+    public fun payout_at_settlement(legs: &vector<Leg>, settlement: u64): u64 {
+        payout_at(legs, settlement)
+    }
+
     fun payout_at(legs: &vector<Leg>, settlement: u64): u64 {
         let mut payout = 0;
         let mut i = 0;
@@ -352,6 +385,24 @@ module predict_studio::studio {
 
     fun max_u64(a: u64, b: u64): u64 {
         if (a > b) a else b
+    }
+
+    public(package) fun destroy_settled(pos: StructuredPosition) {
+        assert!(pos.settled, EOracleNotSettled);
+        let StructuredPosition {
+            id,
+            owner: _,
+            manager_id: _,
+            oracle_id: _,
+            expiry_ms: _,
+            shape: _,
+            legs: _,
+            premium_paid: _,
+            max_loss: _,
+            max_gain: _,
+            settled: _,
+        } = pos;
+        object::delete(id);
     }
 
     #[test_only]

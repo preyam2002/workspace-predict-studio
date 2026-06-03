@@ -30,7 +30,8 @@ Predict Studio turns raw Predict binary/range instruments into trader-facing pay
   - wallet provider on Sui testnet
   - live oracle panel
   - strategy picker, 12-product catalog, draw-any-payoff canvas, and scenario sliders
-  - payoff chart, structure summary, solver inspector, mint action, vault market, tranches, creator leaderboard, portfolio grid, positions, and backtest
+  - payoff chart, per-note greeks, structure summary, solver inspector, mint action, vault market, tranches, creator leaderboard, portfolio grid, positions, and backtest
+  - mobile `/buy` PWA lane for the gasless AI-intent note flow
 - Scripts in `scripts/`
   - verify-first live gate checker for `/oracles`, `create_manager`, devInspect quote decoding, and local config generation
   - deploy package and record the publish-time `ShareFactory`
@@ -90,6 +91,18 @@ NEXT_PUBLIC_TRANCHE_FLOOR_BPS=8000
 NEXT_PUBLIC_WALRUS_PUBLISHER=https://publisher.walrus-testnet.walrus.space
 NEXT_PUBLIC_WALRUS_AGGREGATOR=https://aggregator.walrus-testnet.walrus.space
 ```
+
+For the mainnet-readiness story, network-scoped overrides use the same suffix:
+
+```bash
+NEXT_PUBLIC_SUI_NETWORK=mainnet
+NEXT_PUBLIC_MAINNET_PREDICT_STUDIO_PACKAGE=0x...
+NEXT_PUBLIC_MAINNET_DEEPBOOK_PREDICT_PACKAGE=0x...
+NEXT_PUBLIC_MAINNET_MANAGER_ID=0x...
+NEXT_PUBLIC_MAINNET_DUSDC_TYPE=0x...::dusdc::DUSDC
+```
+
+The config shim exposes Margin composition only when both `NEXT_PUBLIC_MARGIN_PACKAGE` and `NEXT_PUBLIC_MARGIN_COMPOSE_TARGET` are supplied. No verified public `deepbook_margin` to Predict compose target is wired by default.
 
 The intent API also reads these server-only variables:
 

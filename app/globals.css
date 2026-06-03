@@ -56,6 +56,12 @@ button:disabled {
   padding: 20px 0 32px;
 }
 
+.buy-shell {
+  width: min(560px, calc(100vw - 20px));
+  margin: 0 auto;
+  padding: 12px 0 28px;
+}
+
 .panel {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
@@ -137,5 +143,9 @@ button:disabled {
   .app-shell {
     width: min(100vw - 20px, 760px);
     padding-top: 12px;
+  }
+
+  .icon-button {
+    min-width: 0;
   }
 }

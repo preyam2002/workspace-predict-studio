@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   breakevens,
+  basketGreeks,
   clearPricingCaches,
   ev,
+  greeksLeg,
   greeksUp,
   impliedProb,
   maxGain,
@@ -38,6 +40,25 @@ describe('payoff analytics', () => {
     expect(priceRange(svi, 70_000, 68_000, 72_000)).toBeGreaterThan(0);
     expect(ev(legs, svi, 70_000, 400_000)).toBeGreaterThan(-400_000);
     expect(Object.values(greeksUp(svi, 70_000, 70_000, 1 / 365)).every(Number.isFinite)).toBe(true);
+  });
+
+  it('aggregates basket greeks additively across long legs', () => {
+    const greekSvi: SVI = { a: 0.04, b: 0.1, rho: -0.3, m: 0, sigma: 0.2 };
+    const tauYears = 7 / 365;
+    const upLeg: Leg = { isRange: false, isUp: true, lowerStrike: 100, higherStrike: 0, quantity: 2_000_000 };
+    const downLeg: Leg = { isRange: false, isUp: false, lowerStrike: 100, higherStrike: 0, quantity: 1_000_000 };
+    const up = greeksLeg(greekSvi, 100, upLeg, tauYears);
+    const down = greeksLeg(greekSvi, 100, downLeg, tauYears);
+    const basket = basketGreeks([upLeg, downLeg], greekSvi, 100, tauYears);
+
+    expect(up.delta).toBeGreaterThan(0);
+    expect(down.delta).toBeLessThan(0);
+    expect(basket.mark).toBeCloseTo(up.mark + down.mark, 6);
+    expect(basket.delta).toBeCloseTo(up.delta + down.delta, 12);
+    expect(basket.gamma).toBeCloseTo(up.gamma + down.gamma, 12);
+    expect(basket.vega).toBeCloseTo(up.vega + down.vega, 6);
+    expect(basket.theta).toBeCloseTo(up.theta + down.theta, 6);
+    expect(Object.values(basket).every(Number.isFinite)).toBe(true);
   });
 
   it('memoizes arb-guard checks per SVI surface', () => {

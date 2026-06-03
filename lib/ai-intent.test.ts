@@ -109,6 +109,8 @@ describe('ai intent DSL', () => {
       tool_choice: { type: 'tool', name: 'create_structured_note' },
       tools: [{ name: 'create_structured_note', input_schema: intentToolInputSchema }],
     });
+    expect(String((calls[0] as { system?: string }).system)).toMatch(/never negative/i);
+    expect(String((calls[0] as { system?: string }).system)).toMatch(/8 legs/i);
     expect(result.echo).toContain('BTC range note');
     expect(result.solution.legCount).toBeLessThanOrEqual(8);
   });

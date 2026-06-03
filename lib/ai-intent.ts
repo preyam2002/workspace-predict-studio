@@ -173,7 +173,8 @@ function buildAnthropicBody(prompt: string, oracle: OracleState, model: string, 
     max_tokens: 900,
     system:
       'Convert a market view into one long-only structured note payoff. Use only the create_structured_note tool. ' +
-      'All payoffs must be non-negative at every settlement price. Prefer catalog when the view matches a named product; use regions for simple ranges or one-sided views.',
+      'The target payoff g is never negative at any settlement price, and the final replicated note must fit within 8 legs. ' +
+      'Prefer catalog when the view matches a named product; use regions for simple ranges or one-sided views.',
     tools: [
       {
         name: 'create_structured_note',

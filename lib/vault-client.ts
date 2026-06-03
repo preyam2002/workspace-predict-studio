@@ -48,6 +48,16 @@ export interface FundManagerParams {
   amount: number;
 }
 
+export interface KeeperSettleParams {
+  vaultId: string;
+  keeperCapId: string;
+  managerEscrowId: string;
+  quoteType: string;
+  predictId: string;
+  managerId: string;
+  oracleId: string;
+}
+
 export interface KeeperRollIntoStrategyParams extends RollIntoStrategyParams {
   keeperCapId: string;
   budget: number;
@@ -130,6 +140,12 @@ export class VaultClient {
     return tx;
   }
 
+  buildKeeperSettleTx(params: KeeperSettleParams): Transaction {
+    const tx = new Transaction();
+    this.addKeeperSettle(tx, params);
+    return tx;
+  }
+
   buildCreateManagerEscrowTx(ids: VaultIds, managerId: string): Transaction {
     const tx = new Transaction();
     const escrow = tx.moveCall({
@@ -201,6 +217,22 @@ export class VaultClient {
     return tx;
   }
 
+  private addKeeperSettle(tx: Transaction, params: KeeperSettleParams, vault = tx.object(params.vaultId)) {
+    tx.moveCall({
+      target: `${this.pkg}::vault::keeper_settle`,
+      typeArguments: [params.quoteType],
+      arguments: [
+        vault,
+        tx.object(params.keeperCapId),
+        tx.object(params.managerEscrowId),
+        tx.object(params.predictId),
+        tx.object(params.managerId),
+        tx.object(params.oracleId),
+        tx.object('0x6'),
+      ],
+    });
+  }
+
   private addFundManager(tx: Transaction, params: FundManagerParams, vault = tx.object(params.vaultId)) {
     tx.moveCall({
       target: `${this.pkg}::vault::fund_manager_from_idle`,
@@ -233,17 +265,37 @@ export class VaultClient {
     });
   }
 
-  async readNav(vaultId: string, quoteType: string, sender: string): Promise<number> {
+  async readNav(vaultId: string, quoteType: string, predictId: string, oracleId: string, sender: string): Promise<number> {
     const tx = new Transaction();
     tx.moveCall({
       target: `${this.pkg}::vault::nav`,
       typeArguments: [quoteType],
-      arguments: [tx.object(vaultId)],
+      arguments: [tx.object(vaultId), tx.object(predictId), tx.object(oracleId), tx.object('0x6')],
     });
     const result = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
     const navBytes = result.results?.at(-1)?.returnValues?.[0]?.[0];
     if (!navBytes) throw new Error('readNav: missing devInspect return value');
     return decodeU64LE(navBytes);
+  }
+
+  async readShareValueMarked(
+    vaultId: string,
+    quoteType: string,
+    shares: number,
+    predictId: string,
+    oracleId: string,
+    sender: string,
+  ): Promise<number> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${this.pkg}::vault::share_value_marked`,
+      typeArguments: [quoteType],
+      arguments: [tx.object(vaultId), tx.pure.u64(shares), tx.object(predictId), tx.object(oracleId), tx.object('0x6')],
+    });
+    const result = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
+    const valueBytes = result.results?.at(-1)?.returnValues?.[0]?.[0];
+    if (!valueBytes) throw new Error('readShareValueMarked: missing devInspect return value');
+    return decodeU64LE(valueBytes);
   }
 
   async readShareValue(vaultId: string, quoteType: string, shares: number, sender: string): Promise<number> {

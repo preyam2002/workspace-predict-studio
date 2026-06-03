@@ -33,34 +33,34 @@ These are bugs the test suite missed because the asserts were weak. They must be
 **Files:** `move/sources/vault.move`, `move/tests/vault_tests.move`.
 
 - [x] **V1 safety fix:** deposits and withdrawals cannot reprice shares during an open strategy epoch. `withdraw`, `keeper_roll`, and direct `process_pending` now abort while `strategy_open` or a stored `StructuredPosition` remains.
-- [ ] **Step 1: Failing test** — open a strategy in a test vault, then assert `nav(vault, predict, oracle, clock)` ≈ `idle_after_roll + Σ bid_value(leg)`, and that `to_assets(total_shares)` ≈ that NAV (not the stale cash figure). Use the existing Predict test harness pattern from `studio_tests.move`.
-- [ ] **Step 2: Run → FAIL** (`nav` signature today takes no oracle/predict).
-- [ ] **Step 3: Implement** `marked_position_value<Q>(predict, oracle, pos, clock): u64` that loops the position's legs and sums `predict::get_range_trade_amounts(...).1` (bid×qty) for ranges and `predict::get_trade_amounts(...).1` for binaries; change `nav` to `idle_value + marked_position_value(...)` when `open` is some, else idle. Update `roll_into_strategy` to set `accounted_assets = idle_after + marked_value` at roll time, and re-mark on each NAV read.
-- [ ] **Step 4: Run → PASS.**
-- [ ] **Step 5:** Update `to_shares`/`to_assets`/`crystallize_fee` callers to take the oracle-marked NAV. Re-run `donation_does_not_move_share_price` + HWM test to ensure they still pass with the new basis. **Commit** `fix(vault): mark open position into NAV (was cash-only)`.
+- [x] **Step 1: Failing test** — open a strategy in a test vault, then assert `nav(vault, predict, oracle, clock)` ≈ `accounted_cash_after_roll + Σ bid_value(leg)`, and that marked share value tracks that NAV (not the stale cash figure). Uses a real Predict + OracleSVI test harness.
+- [x] **Step 2: Run → FAIL** (`nav` signature previously took no oracle/predict).
+- [x] **Step 3: Implement** `marked_value(predict, oracle, pos, clock): u64` that loops the position's legs and sums `predict::get_range_trade_amounts(...).1` (bid×qty) for ranges and `predict::get_trade_amounts(...).1` for binaries; changed `nav` to `accounted_cash + marked_value(...)` when `open` is some, else accounted cash. `roll_into_strategy` now subtracts premium spent from accounted cash and re-marks on each NAV read.
+- [x] **Step 4: Run → PASS.**
+- [x] **Step 5:** Added marked share value / fee helpers and reran `donation_does_not_move_share_price` + HWM tests with the new basis. **Commit target:** `fix(vault): mark open position into NAV (was cash-only)`.
 
 ### P0.2 — Withdraw must respect deployed capital + lock during open epoch
 
 **Problem:** `withdraw` (`vault.move`) takes assets from `idle` only. If capital is in the manager, a large withdraw either aborts (idle too small) or lets an early withdrawer exit at stale NAV ahead of marked losses.
 
-- [ ] **Step 1: Failing test** — roll a strategy, then a withdraw larger than idle should either (a) abort with a clear `EStrategyOpen`/`EInsufficientIdle`, or (b) route through the pending-redemption queue. Pick (a) for v1 (simpler, honest).
-- [ ] **Step 2–4:** Add `assert!(!v.strategy_open || assets <= idle_value, EStrategyOpenWithdrawLocked)` (or gate withdrawals to the pending queue while open). Test passes.
-- [ ] **Step 5: Commit** `fix(vault): lock/guard withdrawals while a strategy is open`.
+- [x] **Step 1: Failing test** — roll a strategy, then a withdraw larger than idle should either (a) abort with a clear `EStrategyOpen`/`EInsufficientIdle`, or (b) route through the pending-redemption queue. Pick (a) for v1 (simpler, honest).
+- [x] **Step 2–4:** Gate withdrawals while `strategy_open` or a stored open position exists. Test passes.
+- [x] **Step 5: Commit target** `fix(vault): lock/guard withdrawals while a strategy is open`.
 
 ### P0.3 — `keeper_roll` is a no-op; make it real or delete it
 
 **Problem:** on-chain `keeper_roll` only flips `strategy_open=false` + `process_pending`; the `KeeperCap.max_budget` check guards nothing (budget unused after assert). Real rolling lives in the TS `buildKeeperRollIntoStrategyTx`.
 
 - [x] **V1 safety fix:** `keeper_roll` no longer pretends to close an open strategy; it aborts if `strategy_open` or a stored `StructuredPosition` remains, and it enforces the pending-asset budget before processing deposits.
-- [ ] **Settlement follow-up:** add `keeper_settle` that calls `studio::settle` when `oracle.is_settled()` and clears the stored position before `keeper_roll` can process the next round. Commit `fix(vault): keeper entry actually settles`.
+- [x] **Settlement follow-up:** added `keeper_settle` that calls `studio::settle` when `oracle.is_settled()`, clears the stored position, moves manager cash back to idle, and unblocks `keeper_roll`. **Commit target:** `fix(vault): keeper entry actually settles`.
 
 ### P0.4 — PT/YT production settlement (plan task 4.2 was never built)
 
 **Problem:** `pt_yt.move` only has `settle_for_testing`; no entry reads `oracle.is_settled()`/`settlement_price` to run the real maturity waterfall (PT redeems floor, YT residual).
 
-- [ ] **Step 1: Failing test** — after a settled oracle, `settle_tranche(...)` pays PT the protected floor and YT the residual, summing to total payout (conservation), with no value leak.
-- [ ] **Step 2–4:** Implement `settle_tranche<Q>(&mut TrancheVault, &mut StructuredVault, oracle, clock, ctx)` gated on `oracle.is_settled()`; add `settle` builder to `tranche-client.ts`.
-- [ ] **Step 5: Commit** `feat(pt_yt): production maturity settlement + conservation test`.
+- [x] **Step 1: Failing test** — after a settled oracle, `settle_tranche(...)` redeems locked shares, then PT/YT redemption sums to the total payout (conservation), with no value leak.
+- [x] **Step 2–4:** Implemented `settle_tranche(&mut TrancheVault, &mut StructuredVault<DUSDC_T>, oracle, clock, ctx)` gated on `oracle.is_settled()`; added the `settle` builder to `tranche-client.ts`.
+- [x] **Step 5: Commit target** `feat(pt_yt): production maturity settlement + conservation test`.
 
 ### P0.5 — `studio_collateral` floor_value is unvalidated input
 
@@ -109,7 +109,7 @@ function RegisterEnokiWallets() {
 
 - [x] **Step 2 — sponsored mint (3-leg round-trip).** Client builds **kind-only** bytes (`tx.build({ client, onlyTransactionKind: true })`), POSTs to `/api/sponsor`, user signs returned bytes, POSTs sig to `/api/execute`. Backend uses `new EnokiClient({ apiKey: process.env.ENOKI_PRIVATE_KEY! })` → `createSponsoredTransaction({ network:'testnet', transactionKindBytes, sender, allowedMoveCallTargets:[`${PKG}::studio::build_and_mint_to_sender`], allowedAddresses:[sender] })` then `executeSponsoredTransaction({ digest, signature })`. (Full code in the SDK-research appendix.)
 - [x] **Step 3 —** add a "Sign in with Google" path (filter `useWallets().filter(isEnokiWallet)`, connect the `google` provider) and a "buy gasless" toggle on `MintButton`.
-- [ ] **Step 4 —** unit-tested sponsor/execute helpers with a mocked Enoki client; manual testnet smoke remains blocked on Enoki private key + funded manager/tokens. **Commit** `feat(enoki): zkLogin login + sponsored gasless mint`.
+- [x] **Step 4 —** unit-tested sponsor/execute helpers with a mocked Enoki client; manual testnet smoke remains blocked on Enoki private key + funded manager/tokens. **Commit** `feat(enoki): zkLogin login + sponsored gasless mint`.
 
 > **Gotchas:** never ship the private key client-side; `onlyTransactionKind:true` is mandatory (full build → Enoki rejects); targets must match the Portal allowlist; Enoki wallets are network-bound (re-register on switch).
 
@@ -173,19 +173,25 @@ From competitive research. Do in this order; each is independently shippable. **
 
 **Why:** cheap technical-axis depth off data you already pull (SVI surface). Sells the "Block-Scholes-powered pricing" story. `greeksUp` already exists in `payoff.ts`.
 
-- [ ] Aggregate basket greeks (Δ/Γ/Vega/Θ) additively across legs (all long → additive); render a per-note panel + the payoff-at-expiry curve with breakevens/max-loss/max-gain marked. **CUT portfolio VaR** (heavy, low demo punch). **Commit** `feat(ui): per-note greeks + payoff diagram`.
+- [x] Aggregate basket greeks (Δ/Γ/Vega/Θ) additively across legs (all long → additive); render a per-note panel + the payoff-at-expiry curve with breakevens/max-loss/max-gain marked. **CUT portfolio VaR** (heavy, low demo punch). **Commit** `feat(ui): per-note greeks + payoff diagram`.
 
 ### P2.3 — Gasless zkLogin buy-lane PWA (trimmed, ~4–5d)
 
 **Why:** mass-market real-world distribution, newly cheap because Sui shipped gasless stablecoin transfers + zkLogin. **Trim to** a mobile-responsive PWA of the *buy-a-note flow only* (reuse the P2.1 IntentBar + P1.1 Enoki sponsored mint) — **not** a second builder, **not** a native Telegram bot. Ship as a thin consumer lane over the same backend. **Commit** `feat(pwa): gasless mobile buy-a-note lane`.
 
+- [x] Implemented `/buy` as the mobile gasless buy lane, reused IntentBar + sponsored `MintButton`, and added an installable web manifest.
+
 ### P2.4 — Mainnet-migration shim + one Margin composition (~1–2d)
 
 **Why:** the prize literally pays 50% on mainnet deploy, and Predict is testnet-only. A config abstraction that flips all package/object IDs (testnet→mainnet) in one place + a roadmap slide "mainnet-ready the day Predict mainnets" is a direct judging lever most teams fumble. Pair with **one explicit `deepbook_margin` composition** (leverage a note in the same PTB) to satisfy the DeepBook sponsor's "compose deeply" wish — 🔎VERIFY the margin↔predict path exists before committing (prior research found it may not; if it doesn't, drop the Margin leg and keep the shim). **Commit** `feat: mainnet-migration config shim (+ margin compose if available)`.
 
+- [x] Implemented network-scoped config shim for testnet/mainnet package/object IDs and wired app/provider/Cetus paths through it. Verified no concrete public `deepbook_margin`↔Predict compose target exists in repo/public docs, so the Margin leg stays explicitly unsupported rather than faked.
+
 ### P2.5 — Replication↔settlement correctness property test (~1–2d)
 
 **Why:** a DeepBook judge will poke at "does the replicated payoff actually equal the target at settlement?" Add a property test: for random catalog notes + random settlement prices, assert on-chain `settle` payout == `Σ legPays(leg, settlement)·qty` == the target payoff at that price. This defends the technical core. **Commit** `test: replication=payoff correctness property test across settlements`.
+
+- [x] Added TS sampled catalog replication property test and Move settlement-grid payout test via `studio::payout_at_settlement`.
 
 **Keep as demo dressing only (≪1d):** the existing creator leaderboard / "featured notes" gallery. No token, no emissions.
 
@@ -195,7 +201,7 @@ From competitive research. Do in this order; each is independently shippable. **
 
 Blocked on tokens: 5,000 dUSDC (tally.so/r/Xx102L) + ~50 SUI → `0x89c2…338a`. Nothing here can start until tokens land.
 
-- [ ] **P3.1 — `pnpm verify:first`** resolves the remaining unknowns against live testnet: `predict::create_manager` signature + event, `devInspect` return decoding for `get_trade_amounts`, `PredictManager` `store`/`&mut`-in-PTB ability, escrow-backed vault roll. Fix any decoder/signature mismatches found.
+- [ ] **P3.1 — `pnpm verify:first`** resolves the remaining unknowns against live testnet: latest shell run confirms `predict::create_manager`, `devInspect` quote decoding, and `PredictManager` lacks `store`; still needs funded escrow-backed vault roll proof. Fix any decoder/signature mismatches found.
 - [ ] **P3.2 — `pnpm bench`** (gas-benchmark): stack N `predict::mint` calls vs the 5M compute cap; set the solver's `maxLegs` from the measured safe budget (currently a guess of 8).
 - [ ] **P3.3 — deploy** all packages (`deploy.ts`), record `packageId`/`deploy.json`, fill `.env` `NEXT_PUBLIC_*`. Create + fund a `PredictManager` (`setup-manager.ts`), create the share `ShareFactory`/vault.
 - [ ] **P3.4 — full e2e + capture tx digests:** create vault → Enoki gasless deposit → roll into an Iron Condor → settle → redeem; record every digest. Validate the escrow-backed roll path live (the one architectural risk). Run `seed-vaults.ts` to create real on-chain demo vaults (currently only writes a JSON fixture).
