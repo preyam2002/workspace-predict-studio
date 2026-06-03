@@ -1,5 +1,5 @@
-import { Builder } from './components/Builder';
+import { BuyLane } from './components/BuyLane';
 
 export default function Page() {
-  return <Builder />;
+  return <BuyLane variant="landing" />;
 }

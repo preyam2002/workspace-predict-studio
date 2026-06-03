@@ -48,6 +48,19 @@ describe('keeper roll planning', () => {
     ).toBe('wait');
   });
 
+  it('can force a roll plan for live dry-run validation before expiry', () => {
+    expect(
+      planKeeperRoll(
+        { ...oracle, status: 'active', expiryMs: Date.now() + 60_000 },
+        { downsideDelta: 0.25, upsideDelta: 0.25 },
+        1_000_000,
+        Date.now(),
+        undefined,
+        true,
+      ).action,
+    ).toBe('roll');
+  });
+
   it('builds a keeper roll PTB only when the plan rolls', () => {
     const roll = buildKeeperRollDryRun(
       {

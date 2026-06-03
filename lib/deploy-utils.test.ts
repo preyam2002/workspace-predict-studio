@@ -18,9 +18,10 @@ describe('parsePublishResult', () => {
       parseVaultSetupResult({
         objectChanges: [
           { type: 'created', objectType: '0x4::vault::ManagerEscrow', objectId: '0xescrow' },
+          { type: 'created', objectType: '0x4::vault::KeeperCap', objectId: '0xkeeper' },
           { type: 'created', objectType: '0x4::vault::StructuredVault<0xd::dusdc::DUSDC>', objectId: '0xvault' },
         ],
       }),
-    ).toEqual({ vaultId: '0xvault', managerEscrowId: '0xescrow' });
+    ).toEqual({ vaultId: '0xvault', managerEscrowId: '0xescrow', keeperCapId: '0xkeeper' });
   });
 });

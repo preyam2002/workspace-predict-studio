@@ -16,6 +16,7 @@ const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
   expiry: number;
   minStrike: number;
   tickSize: number;
+  atmStrike?: number;
 };
 
 for (const key of ['dbp', 'predictId', 'managerId', 'oracleId', 'dusdcType', 'sender', 'expiry', 'minStrike', 'tickSize'] as const) {
@@ -27,11 +28,14 @@ for (const key of ['dbp', 'predictId', 'managerId', 'oracleId', 'dusdcType', 'se
 const client = new SuiJsonRpcClient({ url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });
 const sizes = [1, 3, 5, 8, 10, 12, 15, 20];
 let maxSafe = 0;
+let maxTestedSuccess = 0;
 
 for (const n of sizes) {
   const tx = new Transaction();
+  const center = cfg.atmStrike ?? cfg.minStrike + cfg.tickSize;
   for (let i = 0; i < n; i += 1) {
-    const strike = cfg.minStrike + (i + 1) * cfg.tickSize * 10;
+    const offset = i - Math.floor(n / 2);
+    const strike = Math.max(cfg.minStrike + cfg.tickSize, center + offset * cfg.tickSize);
     const key = tx.moveCall({
       target: `${cfg.dbp}::market_key::up`,
       arguments: [tx.pure.id(cfg.oracleId), tx.pure.u64(cfg.expiry), tx.pure.u64(strike)],
@@ -53,8 +57,10 @@ for (const n of sizes) {
   const result = await client.devInspectTransactionBlock({ sender: cfg.sender, transactionBlock: tx });
   const computation = Number(result.effects?.gasUsed?.computationCost ?? 0);
   const status = result.effects?.status.status ?? 'unknown';
+  if (status === 'success') maxTestedSuccess = n;
   if (status === 'success' && computation < 5_000_000) maxSafe = n;
   console.log(`${n}\t${computation}\t${status}${result.effects?.status.error ? `\t${result.effects.status.error}` : ''}`);
 }
 
-console.log(`MAX_LEGS_PER_PTB=${maxSafe || 8}`);
+console.log(`MAX_SPONSORED_LEGS_UNDER_5M=${maxSafe || 0}`);
+console.log(`MAX_TESTED_LEGS_PER_PTB=${maxTestedSuccess}`);

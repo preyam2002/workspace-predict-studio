@@ -1,11 +1,14 @@
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl, type SuiObjectData } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const INDEXER_BASE = 'https://predict-server.testnet.mystenlabs.com';
 const CLOCK_ID = '0x6';
 const ONE_USDC = 1_000_000;
 const DEFAULT_SENDER = '0x0000000000000000000000000000000000000000000000000000000000000001';
+const TESTNET_DUSDC_TYPE =
+  '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC';
 
 interface IndexerOracle {
   predict_id: string;
@@ -32,6 +35,17 @@ interface LiveConfig {
   forward?: number;
   atmStrike?: number;
   lastVerifiedAt?: string;
+  vaultId?: string;
+  managerEscrowId?: string;
+  managerFunded?: boolean;
+  managerFundDigest?: string;
+  sampleMintDigest?: string;
+  samplePositionId?: string;
+  samplePositionShape?: string;
+  samplePositionPremiumPaid?: string;
+  samplePositionMaxLoss?: string;
+  samplePositionMaxGain?: string;
+  samplePositionExpiry?: number;
 }
 
 type MoveFields = Record<string, unknown>;
@@ -72,6 +86,18 @@ function readExistingConfig(): Partial<LiveConfig> {
   return JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as Partial<LiveConfig>;
 }
 
+function configured(value: string | undefined): value is string {
+  return Boolean(value && !value.startsWith('replace-') && value !== DEFAULT_SENDER);
+}
+
+function readCliActiveAddress(): string | undefined {
+  try {
+    return execSync('sui client active-address', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
 async function readOracles(): Promise<IndexerOracle[]> {
   const res = await fetch(`${INDEXER_BASE}/oracles`);
   if (!res.ok) throw new Error(`/oracles returned ${res.status}`);
@@ -80,10 +106,29 @@ async function readOracles(): Promise<IndexerOracle[]> {
   return body as IndexerOracle[];
 }
 
+async function readFirstCoinObjectId(rpcUrl: string, owner: string, coinType: string): Promise<string | undefined> {
+  if (!configured(owner) || !configured(coinType)) return undefined;
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'suix_getCoins',
+      params: [owner, coinType, null, 1],
+    }),
+  });
+  if (!res.ok) return undefined;
+  const body = (await res.json()) as { result?: { data?: Array<{ coinObjectId?: string }> } };
+  return body.result?.data?.[0]?.coinObjectId;
+}
+
 async function main() {
   const writeConfig = process.argv.includes('--write-config');
+  const rpcUrl = process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet');
+  const existing = readExistingConfig();
   const client = new SuiJsonRpcClient({
-    url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'),
+    url: rpcUrl,
     network: 'testnet',
   });
 
@@ -105,7 +150,7 @@ async function main() {
   const minStrike = numeric(oracle.min_strike, 'min_strike');
   const tickSize = numeric(oracle.tick_size, 'tick_size');
   const atmStrike = minStrike + Math.max(1, Math.round((forward - minStrike) / tickSize)) * tickSize;
-  const sender = process.env.SUI_SENDER ?? readExistingConfig().sender ?? DEFAULT_SENDER;
+  const sender = process.env.SUI_SENDER ?? (configured(existing.sender) ? existing.sender : undefined) ?? readCliActiveAddress() ?? DEFAULT_SENDER;
 
   const createManager = await client.getNormalizedMoveFunction({
     package: dbp,
@@ -148,14 +193,24 @@ async function main() {
   console.log(`devinspect_quote\tok\task=${ask}\tbid=${bid}\tsender=${sender}`);
 
   if (writeConfig) {
-    const existing = readExistingConfig();
+    const dusdcType =
+      process.env.NEXT_PUBLIC_DUSDC_TYPE ??
+      process.env.DUSDC_TYPE ??
+      (configured(existing.dusdcType) ? existing.dusdcType : undefined) ??
+      TESTNET_DUSDC_TYPE;
+    const dusdcCoinId =
+      process.env.DUSDC_COIN_ID ??
+      (configured(existing.dusdcCoinId) ? existing.dusdcCoinId : undefined) ??
+      (await readFirstCoinObjectId(rpcUrl, sender, dusdcType)) ??
+      'replace-with-dUSDC-coin-object-id';
     const config: LiveConfig = {
+      ...existing,
       predictId: oracle.predict_id,
       oracleId: oracle.oracle_id,
       dbp,
       managerId: existing.managerId ?? 'replace-after-running-pnpm-setup',
-      dusdcType: existing.dusdcType ?? process.env.NEXT_PUBLIC_DUSDC_TYPE ?? 'replace-with-dUSDC-coin-type',
-      dusdcCoinId: existing.dusdcCoinId ?? 'replace-with-dUSDC-coin-object-id',
+      dusdcType,
+      dusdcCoinId,
       sender,
       expiry: oracle.expiry,
       minStrike,

@@ -2,11 +2,13 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
-import { BadgeDollarSign } from 'lucide-react';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { HACKATHON_SPINE, OPTIONS_GAP_WEDGE } from '@/lib/hackathon-copy';
 import { getAppNetworkConfig } from '@/lib/network-config';
 import { breakevens, ev, maxGain } from '@/lib/payoff';
 import { PredictClient, loadOracleState } from '@/lib/predict-client';
+import { decodeShareableNote } from '@/lib/shareable-note';
 import { USDC, type SparseTarget, type StructureQuote } from '@/lib/types';
 import { optimizeSparse } from '@/lib/optimizer';
 import { IntentBar } from './IntentBar';
@@ -14,15 +16,28 @@ import { MintButton } from './MintButton';
 import { NoteAnalyticsPanel } from './NoteAnalyticsPanel';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
+import { ReplicationProofPanel } from './ReplicationProofPanel';
+import { ShareNoteButton } from './ShareNoteButton';
 import { StructureSummary } from './StructureSummary';
+import { WalletControls } from './WalletControls';
 
 const appConfig = getAppNetworkConfig();
 
-export function BuyLane() {
+function decodeInitialNote(value?: string) {
+  if (!value) return undefined;
+  try {
+    return decodeShareableNote(value);
+  } catch {
+    return undefined;
+  }
+}
+
+export function BuyLane({ initialNoteParam, variant = 'buy' }: { initialNoteParam?: string; variant?: 'landing' | 'buy' }) {
+  const initialNote = decodeInitialNote(initialNoteParam);
   const sui = useSuiClient();
   const account = useCurrentAccount();
-  const [target, setTarget] = useState<SparseTarget | undefined>();
-  const [echo, setEcho] = useState<string | undefined>();
+  const [target, setTarget] = useState<SparseTarget | undefined>(initialNote?.target);
+  const [echo, setEcho] = useState<string | undefined>(initialNote?.echo);
   const [digest, setDigest] = useState<string | undefined>();
   const oracleQuery = useQuery({
     queryKey: ['buy-lane-oracle-state', appConfig.oracleId, appConfig.managerId, appConfig.dusdcType],
@@ -55,12 +70,25 @@ export function BuyLane() {
 
   return (
     <main className="buy-shell">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <div className="metric-label">Gasless buy lane</div>
-          <h1 className="text-2xl font-semibold tracking-normal">Predict Studio</h1>
+      <header className="mb-4 grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="metric-label">{variant === 'landing' ? 'DeepBook Predict' : 'Gasless buy lane'}</div>
+            <h1 className="text-2xl font-semibold tracking-normal">
+              {variant === 'landing' ? 'English in. Defined risk out.' : 'Predict Studio'}
+            </h1>
+          </div>
+          <WalletControls />
         </div>
-        <BadgeDollarSign size={22} className="good-text" />
+        {variant === 'landing' ? (
+          <div className="surface px-3 py-2 text-sm">
+            <p className="mb-2">{HACKATHON_SPINE}</p>
+            <p className="metric-label normal-case">{OPTIONS_GAP_WEDGE}</p>
+            <Link className="mt-3 inline-flex text-sm blue-text" href="/advanced">
+              Advanced builder
+            </Link>
+          </div>
+        ) : null}
       </header>
       <OraclePanel
         oracle={oracle}
@@ -97,7 +125,9 @@ export function BuyLane() {
             />
           </section>
           {quote ? <NoteAnalyticsPanel legs={quote.legs} premium={quote.totalCost} oracle={oracle} /> : null}
+          {quote ? <ReplicationProofPanel legs={quote.legs} premium={quote.totalCost} target={target} liveDigest={digest} /> : null}
           <StructureSummary quote={quote} quoteSource="AI intent sparse SVI estimate" />
+          <ShareNoteButton echo={echo} target={target} quote={quote} />
           <MintButton
             client={client}
             oracle={oracle}

@@ -190,6 +190,17 @@ export class VaultClient {
     return tx;
   }
 
+  buildGrantKeeperTx(ids: VaultIds, maxBudget: number): Transaction {
+    const tx = new Transaction();
+    const cap = tx.moveCall({
+      target: `${this.pkg}::vault::grant_keeper`,
+      typeArguments: [ids.quoteType],
+      arguments: [tx.object(ids.vaultId), tx.pure.u64(maxBudget)],
+    });
+    tx.transferObjects([cap], tx.pure.address(ids.recipient));
+    return tx;
+  }
+
   buildRollIntoStrategyTx(params: RollIntoStrategyParams): Transaction {
     const tx = new Transaction();
     this.addRollIntoStrategy(tx, params);

@@ -13,6 +13,7 @@ export interface PublishParseResult {
 export interface VaultSetupParseResult {
   vaultId?: string;
   managerEscrowId?: string;
+  keeperCapId?: string;
 }
 
 export function parsePublishResult(result: { objectChanges?: ObjectChange[] | null }): PublishParseResult {
@@ -26,5 +27,6 @@ export function parsePublishResult(result: { objectChanges?: ObjectChange[] | nu
 export function parseVaultSetupResult(result: { objectChanges?: ObjectChange[] | null }): VaultSetupParseResult {
   const vaultId = result.objectChanges?.find((change) => change.objectType?.includes('::vault::StructuredVault'))?.objectId;
   const managerEscrowId = result.objectChanges?.find((change) => change.objectType?.endsWith('::vault::ManagerEscrow'))?.objectId;
-  return { vaultId, managerEscrowId };
+  const keeperCapId = result.objectChanges?.find((change) => change.objectType?.endsWith('::vault::KeeperCap'))?.objectId;
+  return { vaultId, managerEscrowId, keeperCapId };
 }

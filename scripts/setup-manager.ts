@@ -11,8 +11,13 @@ if (!existsSync('./scripts/config.json')) {
 
 const cfg = JSON.parse(readFileSync('./scripts/config.json', 'utf8')) as {
   dbp: string;
+  managerId?: string;
   dusdcType?: string;
   dusdcCoinId?: string;
+  managerFunded?: boolean;
+  vaultId?: string;
+  managerEscrowId?: string;
+  keeperCapId?: string;
 };
 
 function keypairFromEnv() {
@@ -23,29 +28,37 @@ function keypairFromEnv() {
   return Ed25519Keypair.fromSecretKey(bytes.length === 33 ? bytes.slice(1) : bytes);
 }
 
+function isObjectId(value: string | undefined): value is string {
+  return Boolean(value?.startsWith('0x'));
+}
+
 const keypair = keypairFromEnv();
 const client = new SuiJsonRpcClient({ url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });
 const sender = keypair.getPublicKey().toSuiAddress();
+const deploy = existsSync('./deploy.json') ? JSON.parse(readFileSync('./deploy.json', 'utf8')) : {};
 
-const createTx = new Transaction();
-createTx.moveCall({ target: `${cfg.dbp}::predict::create_manager`, arguments: [] });
-const created = await client.signAndExecuteTransaction({
-  signer: keypair,
-  transaction: createTx,
-  options: { showEvents: true, showEffects: true },
-});
+let managerId = (deploy.managerId as string | undefined) ?? cfg.managerId;
+if (!managerId) {
+  const createTx = new Transaction();
+  createTx.moveCall({ target: `${cfg.dbp}::predict::create_manager`, arguments: [] });
+  const created = await client.signAndExecuteTransaction({
+    signer: keypair,
+    transaction: createTx,
+    options: { showEvents: true, showEffects: true },
+  });
 
-if (created.effects?.status.status !== 'success') {
-  throw new Error(`create_manager failed: ${created.effects?.status.error ?? 'unknown error'}`);
+  if (created.effects?.status.status !== 'success') {
+    throw new Error(`create_manager failed: ${created.effects?.status.error ?? 'unknown error'}`);
+  }
+
+  const createdEvent = created.events?.find((event: { type: string }) =>
+    event.type.endsWith('::predict_manager::PredictManagerCreated'),
+  );
+  managerId = (createdEvent?.parsedJson as { manager_id?: string } | undefined)?.manager_id;
+  if (!managerId) throw new Error('PredictManagerCreated event did not include manager_id');
 }
 
-const createdEvent = created.events?.find((event: { type: string }) =>
-  event.type.endsWith('::predict_manager::PredictManagerCreated'),
-);
-const managerId = (createdEvent?.parsedJson as { manager_id?: string } | undefined)?.manager_id;
-if (!managerId) throw new Error('PredictManagerCreated event did not include manager_id');
-
-if (cfg.dusdcType && cfg.dusdcCoinId) {
+if (cfg.dusdcType && isObjectId(cfg.dusdcCoinId) && !cfg.managerFunded) {
   const fundTx = new Transaction();
   fundTx.moveCall({
     target: `${cfg.dbp}::predict_manager::deposit`,
@@ -58,10 +71,10 @@ if (cfg.dusdcType && cfg.dusdcCoinId) {
   }
 }
 
-const deploy = existsSync('./deploy.json') ? JSON.parse(readFileSync('./deploy.json', 'utf8')) : {};
-let vaultId = deploy.vaultId as string | undefined;
-let managerEscrowId = deploy.managerEscrowId as string | undefined;
-if (deploy.packageId && deploy.shareFactoryId && cfg.dusdcType) {
+let vaultId = (deploy.vaultId as string | undefined) ?? cfg.vaultId;
+let managerEscrowId = (deploy.managerEscrowId as string | undefined) ?? cfg.managerEscrowId;
+let keeperCapId = (deploy.keeperCapId as string | undefined) ?? cfg.keeperCapId;
+if ((!vaultId || !managerEscrowId) && deploy.packageId && deploy.shareFactoryId && cfg.dusdcType) {
   const vaultTx = new VaultClient(client, deploy.packageId).buildCreateVaultWithManagerEscrowTx({
     factoryId: deploy.shareFactoryId,
     quoteType: cfg.dusdcType,
@@ -79,11 +92,28 @@ if (deploy.packageId && deploy.shareFactoryId && cfg.dusdcType) {
   if (vaultSetup.effects?.status.status !== 'success') {
     throw new Error(`vault setup failed: ${vaultSetup.effects?.status.error ?? 'unknown error'}`);
   }
-  ({ vaultId, managerEscrowId } = parseVaultSetupResult(vaultSetup));
+  ({ vaultId, managerEscrowId, keeperCapId } = { ...{ vaultId, managerEscrowId, keeperCapId }, ...parseVaultSetupResult(vaultSetup) });
 }
 
-writeFileSync('./deploy.json', JSON.stringify({ ...deploy, managerId, vaultId, managerEscrowId }, null, 2));
-writeFileSync('./scripts/config.json', `${JSON.stringify({ ...cfg, managerId, vaultId, managerEscrowId, sender }, null, 2)}\n`);
+if (deploy.packageId && vaultId && cfg.dusdcType && !keeperCapId) {
+  const keeperTx = new VaultClient(client, deploy.packageId).buildGrantKeeperTx(
+    { vaultId, quoteType: cfg.dusdcType, recipient: sender },
+    Number(process.env.STUDIO_KEEPER_MAX_BUDGET ?? 50_000_000),
+  );
+  const granted = await client.signAndExecuteTransaction({
+    signer: keypair,
+    transaction: keeperTx,
+    options: { showEffects: true, showObjectChanges: true },
+  });
+  if (granted.effects?.status.status !== 'success') {
+    throw new Error(`keeper grant failed: ${granted.effects?.status.error ?? 'unknown error'}`);
+  }
+  ({ keeperCapId } = { ...{ keeperCapId }, ...parseVaultSetupResult(granted) });
+}
+
+writeFileSync('./deploy.json', JSON.stringify({ ...deploy, managerId, vaultId, managerEscrowId, keeperCapId }, null, 2));
+writeFileSync('./scripts/config.json', `${JSON.stringify({ ...cfg, managerId, vaultId, managerEscrowId, keeperCapId, sender }, null, 2)}\n`);
 console.log('manager:', managerId);
 if (vaultId) console.log('vault:', vaultId);
 if (managerEscrowId) console.log('manager escrow:', managerEscrowId);
+if (keeperCapId) console.log('keeper cap:', keeperCapId);

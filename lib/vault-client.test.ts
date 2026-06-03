@@ -55,6 +55,17 @@ describe('VaultClient', () => {
     expect(data.commands[1].TransferObjects).toBeDefined();
   });
 
+  it('builds a grant-keeper transaction that transfers the cap to the keeper owner', () => {
+    const client = new VaultClient({} as never, '0x4');
+    const tx = client.buildGrantKeeperTx(ids, 50_000_000);
+
+    const data = tx.getData();
+    expect(data.commands[0].MoveCall?.module).toBe('vault');
+    expect(data.commands[0].MoveCall?.function).toBe('grant_keeper');
+    expect(data.commands[0].MoveCall?.typeArguments).toEqual([ids.quoteType]);
+    expect(data.commands[1].TransferObjects).toBeDefined();
+  });
+
   it('builds an escrow-backed strategy roll transaction', () => {
     const client = new VaultClient({} as never, '0x4');
     const tx = client.buildRollIntoStrategyTx({

@@ -7,6 +7,7 @@ import { FLOAT, type Leg, type OracleState, type SVI } from './types';
 
 type MoveObjectFields = Record<string, unknown>;
 type MoveObjectLike = { objectId?: string; content?: { dataType?: string; fields?: MoveObjectFields } };
+type SettleOracleConfig = Pick<OracleState, 'predictId' | 'managerId' | 'oracleId' | 'dusdcType'>;
 
 export interface StructuredPositionSummary {
   objectId: string;
@@ -312,7 +313,7 @@ export class PredictClient {
     return tx;
   }
 
-  buildSettleTx(oracle: OracleState, positionId: string): Transaction {
+  buildSettleTx(oracle: SettleOracleConfig, positionId: string): Transaction {
     if (!oracle.managerId) throw new Error('Missing PredictManager id');
     if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
     const tx = new Transaction();

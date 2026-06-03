@@ -1,9 +1,7 @@
 'use client';
 
-import { ConnectButton, useConnectWallet, useCurrentAccount, useSuiClient, useWallets } from '@mysten/dapp-kit';
-import { isGoogleWallet } from '@mysten/enoki';
+import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
-import { WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { buildCatalogTarget, type CatalogProductId } from '@/lib/catalog';
 import { decompose } from '@/lib/decompose';
@@ -24,13 +22,16 @@ import { NoteAnalyticsPanel } from './NoteAnalyticsPanel';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
 import { PortfolioPanel } from './PortfolioPanel';
+import { ReplicationProofPanel } from './ReplicationProofPanel';
 import { PositionsDashboard } from './PositionsDashboard';
 import { ScenarioSliders, type Scenario } from './ScenarioSliders';
+import { ShareNoteButton } from './ShareNoteButton';
 import { SolverInspector } from './SolverInspector';
 import { StructureSummary } from './StructureSummary';
 import { TemplatePicker, defaultTemplate } from './TemplatePicker';
 import { TranchePanel } from './TranchePanel';
 import { VaultMarket } from './VaultMarket';
+import { WalletControls } from './WalletControls';
 
 const appConfig = getAppNetworkConfig();
 const STUDIO_PACKAGE = appConfig.predictStudioPackage;
@@ -175,11 +176,7 @@ export function Builder() {
           <div className="metric-label">DeepBook Predict</div>
           <h1 className="text-2xl font-semibold tracking-normal">Predict Studio</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <WalletCards size={18} className="blue-text" />
-          <EnokiGoogleButton />
-          <ConnectButton />
-        </div>
+        <WalletControls />
       </header>
 
       <OraclePanel
@@ -269,6 +266,8 @@ export function Builder() {
           <div className="grid content-start gap-4">
             <StructureSummary quote={quote} quoteSource={quoteSource} />
             {quote ? <NoteAnalyticsPanel oracle={oracle} legs={quote.legs} premium={quote.totalCost} /> : null}
+            {quote ? <ReplicationProofPanel legs={quote.legs} premium={quote.totalCost} target={sparseTarget} liveDigest={digest} /> : null}
+            <ShareNoteButton echo={intentEcho ?? quoteMode} target={sparseTarget} quote={quote} />
             {sparseTarget ? <SolverInspector oracle={oracle} target={sparseTarget} /> : null}
             <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} oracle={oracle} />
             <TranchePanel />
@@ -287,19 +286,5 @@ export function Builder() {
         <PositionsDashboard client={client} oracle={oracle} />
       </div>
     </main>
-  );
-}
-
-function EnokiGoogleButton() {
-  const account = useCurrentAccount();
-  const wallets = useWallets();
-  const { mutate, isPending } = useConnectWallet();
-  const googleWallet = wallets.find(isGoogleWallet);
-  if (account || !googleWallet) return null;
-
-  return (
-    <button className="icon-button" disabled={isPending} type="button" onClick={() => mutate({ wallet: googleWallet })}>
-      Google
-    </button>
   );
 }

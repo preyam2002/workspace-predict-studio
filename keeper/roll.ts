@@ -39,6 +39,7 @@ export interface KeeperConfig extends DeltaBand {
   oracleId?: string;
   sender?: string;
   dryRun?: boolean;
+  forceRoll?: boolean;
   askBounds?: AskBounds;
 }
 
@@ -92,9 +93,10 @@ export function planKeeperRoll(
   budget: number,
   nowMs = Date.now(),
   bounds?: AskBounds,
+  forceRoll = false,
 ): KeeperRollPlan {
   const strikes = selectRangeBand(oracle, band, bounds);
-  if (oracle.status === 'active' && nowMs < oracle.expiryMs) {
+  if (!forceRoll && oracle.status === 'active' && nowMs < oracle.expiryMs) {
     return { action: 'wait', ...strikes, budget };
   }
   return { action: 'roll', ...strikes, budget };
@@ -107,6 +109,7 @@ export function buildKeeperRollDryRun(config: KeeperConfig, oracle: OracleState)
     config.budget,
     Date.now(),
     config.askBounds,
+    config.forceRoll,
   );
   if (plan.action === 'wait') return { plan, tx: undefined };
 
@@ -170,6 +173,7 @@ async function main() {
   const path = configPath();
   if (!existsSync(path)) throw new Error(`Missing ${path}. Copy keeper/config.example.json and fill vault/keeper ids.`);
   const config = JSON.parse(readFileSync(path, 'utf8')) as KeeperConfig;
+  if (process.argv.includes('--force-roll')) config.forceRoll = true;
   const client = new SuiJsonRpcClient({
     url: process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet'),
     network: 'testnet',

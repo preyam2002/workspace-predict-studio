@@ -41,7 +41,17 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
       {positions.data?.length ? (
         <div className="mt-4 grid gap-2">
           {positions.data.map((position: StructuredPositionSummary) => {
-            const mark = oracle && !position.settled ? markLegs(position.legs, oracle.svi, oracle.forward) : 0;
+            const markOracle = oracle?.oracleId === position.oracleId ? oracle : undefined;
+            const settleOracle =
+              oracle && position.oracleId
+                ? {
+                    predictId: oracle.predictId,
+                    managerId: position.managerId ?? oracle.managerId,
+                    oracleId: position.oracleId,
+                    dusdcType: oracle.dusdcType,
+                  }
+                : undefined;
+            const mark = markOracle && !position.settled ? markLegs(position.legs, markOracle.svi, markOracle.forward) : 0;
             const pnl = mark - position.premiumPaid;
             return (
               <div className="surface flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm" key={position.objectId}>
@@ -56,21 +66,21 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
                   <span className="text-[#8c96a8]">Premium</span>
                   <span className="text-right">{money(position.premiumPaid)}</span>
                   <span className="text-[#8c96a8]">Mark</span>
-                  <span className="text-right">{position.settled || !oracle ? '-' : money(mark)}</span>
+                  <span className="text-right">{position.settled || !markOracle ? '-' : money(mark)}</span>
                   <span className="text-[#8c96a8]">P&L</span>
-                  <span className={`text-right ${position.settled || !oracle ? 'text-[#8c96a8]' : pnlClass(pnl)}`}>
-                    {position.settled || !oracle ? '-' : money(pnl)}
+                  <span className={`text-right ${position.settled || !markOracle ? 'text-[#8c96a8]' : pnlClass(pnl)}`}>
+                    {position.settled || !markOracle ? '-' : money(pnl)}
                   </span>
                   <span className="text-[#8c96a8]">Expiry</span>
                   <span className="text-right">{new Date(position.expiryMs).toLocaleString()}</span>
                 </div>
                 <button
                   className="icon-button"
-                  disabled={!oracle || isPending || position.settled}
+                  disabled={!settleOracle?.managerId || !settleOracle.dusdcType || isPending || position.settled}
                   type="button"
                   onClick={() => {
-                    if (!oracle) return;
-                    mutate({ transaction: client.buildSettleTx(oracle, position.objectId) });
+                    if (!settleOracle?.managerId || !settleOracle.dusdcType) return;
+                    mutate({ transaction: client.buildSettleTx(settleOracle, position.objectId) });
                   }}
                 >
                   {position.settled ? 'Settled' : 'Settle'}
