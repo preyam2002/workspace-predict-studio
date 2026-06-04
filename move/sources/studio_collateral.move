@@ -11,6 +11,7 @@ module predict_studio::studio_collateral {
         clock::Clock,
         coin::{Self, Coin},
         object::{Self, UID},
+        transfer,
         tx_context::{Self, TxContext},
     };
 
@@ -52,7 +53,25 @@ module predict_studio::studio_collateral {
 
     public fun total_debt(market: &CollateralMarket): u64 { market.total_debt }
 
+    public fun ltv_bps(market: &CollateralMarket): u64 { market.ltv_bps }
+
     public fun debt(position: &BorrowPosition): u64 { position.debt }
+
+    /// Create an empty lending market. Seed it with `deposit_liquidity` before borrows.
+    public fun new(ltv_bps: u64, ctx: &mut TxContext): CollateralMarket {
+        CollateralMarket {
+            id: object::new(ctx),
+            liquidity: balance::zero<DUSDC_T>(),
+            locked_collateral: balance::zero<STUDIO_LP>(),
+            ltv_bps,
+            total_debt: 0,
+        }
+    }
+
+    /// Deploy entry: create and share a lending market so it can take liquidity and borrows.
+    public entry fun create_and_share_market(ltv_bps: u64, ctx: &mut TxContext) {
+        transfer::public_share_object(new(ltv_bps, ctx));
+    }
 
     public fun borrow_capacity(position: &BorrowPosition, market: &CollateralMarket): u64 {
         position.floor_value * market.ltv_bps / BPS
@@ -189,13 +208,7 @@ module predict_studio::studio_collateral {
 
     #[test_only]
     public fun new_for_testing(ltv_bps: u64, ctx: &mut TxContext): CollateralMarket {
-        CollateralMarket {
-            id: object::new(ctx),
-            liquidity: balance::zero<DUSDC_T>(),
-            locked_collateral: balance::zero<STUDIO_LP>(),
-            ltv_bps,
-            total_debt: 0,
-        }
+        new(ltv_bps, ctx)
     }
 
     #[test_only]

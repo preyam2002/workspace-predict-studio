@@ -14,6 +14,21 @@ module predict_studio::studio_collateral_tests {
     }
 
     #[test]
+    fun new_market_is_empty_with_configured_ltv() {
+        let mut ctx = tx_context::dummy();
+        let mut market = studio_collateral::new(7_500, &mut ctx);
+        assert!(studio_collateral::ltv_bps(&market) == 7_500, 0);
+        assert!(studio_collateral::liquidity(&market) == 0, 1);
+        assert!(studio_collateral::total_debt(&market) == 0, 2);
+        studio_collateral::deposit_liquidity(
+            &mut market,
+            coin::mint_for_testing<vault::DUSDC_T>(1_000_000, &mut ctx),
+        );
+        assert!(studio_collateral::liquidity(&market) == 1_000_000, 3);
+        studio_collateral::destroy_for_testing(market);
+    }
+
+    #[test]
     fun borrows_against_provable_floor_and_releases_after_repay() {
         let mut ctx = tx_context::dummy();
         let (v, s) = share(&mut ctx);
