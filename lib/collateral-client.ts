@@ -1,7 +1,22 @@
 import { Transaction } from '@mysten/sui/transactions';
+import type { Leg } from './types';
 
 export interface CollateralMarketIds {
   marketId: string;
+  recipient: string;
+}
+
+/** Everything needed to mint a note and borrow against it in a single PTB. */
+export interface MintAndBorrowParams {
+  marketId: string;
+  predictId: string;
+  managerId: string;
+  oracleId: string;
+  dusdcType: string;
+  shape: string;
+  legs: Leg[];
+  maxLossBudget: number;
+  borrowAmount: number;
   recipient: string;
 }
 
@@ -53,6 +68,70 @@ export class CollateralClient {
       arguments: [tx.object(ids.marketId), tx.object(positionId)],
     });
     tx.transferObjects([collateral], tx.pure.address(ids.recipient));
+    return tx;
+  }
+
+  private legVec(tx: Transaction, legs: Leg[]) {
+    const legStructs = legs.map((leg) =>
+      tx.moveCall({
+        target: `${this.pkg}::studio::new_leg`,
+        arguments: [
+          tx.pure.bool(leg.isRange),
+          tx.pure.bool(leg.isUp),
+          tx.pure.u64(leg.lowerStrike),
+          tx.pure.u64(leg.higherStrike),
+          tx.pure.u64(leg.quantity),
+        ],
+      }),
+    );
+    return tx.makeMoveVec({ type: `${this.pkg}::studio::Leg`, elements: legStructs });
+  }
+
+  /**
+   * One PTB: mint a defined-risk note, lock it as collateral, and borrow against its
+   * provable value — the note never leaves the transaction. The composability climax.
+   */
+  buildMintAndBorrowTx(p: MintAndBorrowParams): Transaction {
+    const tx = new Transaction();
+    const legVec = this.legVec(tx, p.legs);
+
+    const note = tx.moveCall({
+      target: `${this.pkg}::studio::build_and_mint`,
+      typeArguments: [p.dusdcType],
+      arguments: [
+        tx.object(p.predictId),
+        tx.object(p.managerId),
+        tx.object(p.oracleId),
+        tx.pure.string(p.shape),
+        legVec,
+        tx.pure.u64(p.maxLossBudget),
+        tx.object('0x6'),
+      ],
+    });
+
+    const position = tx.moveCall({
+      target: `${this.pkg}::studio_collateral::open_note_position`,
+      arguments: [tx.object(p.marketId), note, tx.object(p.predictId), tx.object(p.oracleId), tx.object('0x6')],
+    });
+
+    const borrowed = tx.moveCall({
+      target: `${this.pkg}::studio_collateral::borrow`,
+      arguments: [tx.object(p.marketId), position, tx.pure.u64(p.borrowAmount)],
+    });
+
+    tx.transferObjects([borrowed], tx.pure.address(p.recipient));
+    tx.transferObjects([position], tx.pure.address(p.recipient));
+    return tx;
+  }
+
+  /** Repay-to-reclaim: settle the debt then take the escrowed note back. */
+  buildCloseNoteTx(ids: CollateralMarketIds, positionId: string): Transaction {
+    const tx = new Transaction();
+    const note = tx.moveCall({
+      target: `${this.pkg}::studio_collateral::close_note`,
+      arguments: [tx.object(positionId)],
+    });
+    tx.transferObjects([note], tx.pure.address(ids.recipient));
     return tx;
   }
 }

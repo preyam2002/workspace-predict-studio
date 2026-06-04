@@ -17,6 +17,7 @@ export interface AppNetworkConfig {
   vaultId?: string;
   oracleId?: string;
   cetusStudioPoolId?: string;
+  collateralMarketId?: string;
   margin: MarginComposeConfig;
 }
 
@@ -52,6 +53,7 @@ export function getAppNetworkConfig(env: Env = process.env): AppNetworkConfig {
     vaultId: scoped(env, network, 'VAULT_ID'),
     oracleId: scoped(env, network, 'ORACLE_ID'),
     cetusStudioPoolId: scoped(env, network, 'CETUS_STUDIO_POOL_ID'),
+    collateralMarketId: scoped(env, network, 'COLLATERAL_MARKET_ID'),
     margin: marginConfig(env),
   };
 }

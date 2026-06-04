@@ -82,3 +82,34 @@ Live IDs:
 | **3** | P4 video + final README/digests · tag `v1.0-overflow` · submit (2-day buffer) |
 
 **Critical-path reminder:** deploy, mint, sample settlement, and vault settlement are live. The next proof is Enoki + secondary-market config, then the video/submission.
+
+---
+
+## 2026-06-04 — Learnings & K2 collateral fold-in
+
+Distilled from a strategy session. Full executable spec: `docs/superpowers/plans/2026-06-04-predict-studio-k2-completion.md`. Centerpiece below; remaining work is the external submission gates.
+
+**The one highest-value enhancement — K2 collateral fold-in (the new demo spine):** ✅ **Phase 1 core implemented 2026-06-05 (Move 47/47, vitest 129/129, build clean).** `open_note_position`/`close_note`/`note_collateral_value` + `buildMintAndBorrowTx` (one PTB) + `NoteCollateralPanel`. Basis = on-chain `min(marked_bid, max_payout)` (the sound, ungameable version — see plan), framed as a repay-to-reclaim bridge, `max loss = premium` preserved. Remaining: 🔒 deploy a `CollateralMarket` + live `collateral:demo` digests + `hackathon:status` gate.
+- [x] Turn `studio_collateral.move` from "lends dUSDC against idle vault shares only" into "lends dUSDC against ANY owned `StructuredPosition` note, capped at the note's provably-bounded worst-case value."
+- [ ] The provable floor is on-chain and already computable: a long-only basket pays **at most `studio::max_payout(legs)` and at least 0** at settlement — a knowable ceiling/floor with no oracle needed. Bounded vertical-range legs are `[0, max_payout]` by construction; the per-note `max_gain` field is exactly `max_payout(&legs)`. Borrow capacity = `LTV * provable_floor` where the conservative floor is `0` and the collateral-valuation ceiling is `max_payout`; the live redeemable value is `studio::marked_value(predict, oracle, pos, clock)` (bid side).
+- [ ] This requires wiring **marked-NAV settlement** so positions that are *currently rejected* as collateral (open, non-idle) become eligible: value the locked note by its marked bid (already implemented as `studio::marked_value`) and/or its bounded `max_payout`, instead of the existing `EVaultNotIdle` rejection on vault shares.
+- [ ] New live demo beat (replaces the share-deposit beat as the depth climax): **build a defined-risk note in English → in the SAME PTB borrow dUSDC against its provable floor → repay → reclaim the note.** Upgrades the pitch from "a builder of notes" to "a builder AND a mini prime-broker for Predict" — strongest real-world + composability story, ~70% of the code already exists (`max_payout`, `marked_value`, `StructuredPosition` wrapper, `CollateralMarket`, `BorrowPosition`, `collateral-client.ts`).
+
+**Why this collapses the standalone "borrow against a Predict position" idea into Predict Studio:**
+- [ ] Predict positions are **non-transferable** (owner-bound table rows inside `PredictManager`) → they cannot be used as collateral directly. The only collateralizable object is the ownable `StructuredPosition` wrapper, which Predict Studio already mints. So "Lumen / borrow against a Predict position" has no standalone surface — it *is* Predict Studio.
+
+**Guardrails (do not violate):**
+- [ ] **Margin stays excluded.** Keep the clean `max loss = premium` invariant. Predict has zero margin references. Mention margin only as a one-line roadmap item, never build it.
+- [ ] Don't over-build new surface area. The win is making existing depth *live* plus the collateral demo — not new primitives.
+
+**Already done this session (do NOT redo):**
+- [x] README opener sharpened (the $100M-options-gap wedge + spine).
+- [x] `DEMO.md` rewritten into a timed 5-minute video script.
+
+**Remaining EXTERNAL gates (Codex cannot fully complete these — human-in-the-loop):**
+- [ ] Enoki public API key + Google OAuth client + private sponsor key (gasless lane).
+- [ ] Secondary market: 500 DEEP for the DeepBook Spot permissionless pool, OR a `NEXT_PUBLIC_CETUS_STUDIO_POOL_ID`.
+- [ ] Record the 5-minute demo video (now featuring the K2 borrow-against-note beat); set `DEMO_VIDEO_URL`.
+- [ ] Submit to DeepSurge (DeepBook primary, DeFi secondary); set `DEEPSURGE_SUBMISSION_URL`.
+
+**Track reminder:** One project = one track is confirmed. Predict Studio = **DeepBook Predict** (primary), **DeFi** (secondary). The K2 fold-in strengthens both axes without splitting the entry.

@@ -1,10 +1,14 @@
 # Predict Studio
 
-Defined-risk strategy builder for DeepBook Predict.
+**The structured-note factory for DeepBook Predict — describe a market view in English, get a fairly priced, defined-risk note, and mint it on-chain in one transaction. Max loss = premium, by construction.**
 
-On-chain options are still a roughly $100M TVL category because payoff construction is too hard for normal users. Predict Studio turns the flow into one sentence: type your market view in English, get a fairly priced defined-risk note, and buy it gasless. Max loss equals premium by construction.
+## The $100M question
 
-Predict Studio turns raw Predict binary/range instruments into trader-facing payoff shapes, vault shares, tranches, collateral, and RFQ-routable baskets. The engine decomposes the chosen payoff into long-only Predict legs, repairs unsafe SVI slices, prices candidate decompositions with impact, certifies or exact-solves sparse baskets, and mints one owned `StructuredPosition` receipt with an on-chain max-loss envelope.
+On-chain options have sat at roughly **$100M TVL for years** — in the sponsor's own words, *"not a competitive market, an underdeveloped one."* Next door, the same traders pushed **$7.35T** through perp DEXs in 2025, Polymarket cleared **$7B** in a single month at ~70k DAU, and Hyperliquid alone did **$844M** in revenue. The appetite for directional, leveraged bets is not the problem. **Payoff construction is** — building a spread or a defined-risk structure means hand-picking strikes, legs, and sizes, work that normal users will never do.
+
+Predict Studio collapses that into one English sentence. You type *"BTC above $70k by Friday, risk $50."* The engine builds a long-only payoff, repairs unsafe SVI slices, solves a gas-bounded sparse replication off Block Scholes' own on-chain oracle, prices the Predict legs with market impact, and mints a single owned `StructuredPosition` whose max loss is capped at the premium you paid — enforced in the same PTB that builds the legs.
+
+That receipt is then a primitive: it becomes vault shares, PT/YT tranches, lending collateral, RFQ-routable baskets, and Kiosk-tradeable creator notes. This is the sponsor's exact thesis — *"spreads and structured products become a question of UX, not infrastructure"* — shipped and live on testnet.
 
 ## What Is Implemented
 

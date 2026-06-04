@@ -22,6 +22,7 @@ import { NoteAnalyticsPanel } from './NoteAnalyticsPanel';
 import { OraclePanel } from './OraclePanel';
 import { PayoffChart } from './PayoffChart';
 import { PortfolioPanel } from './PortfolioPanel';
+import { NoteCollateralPanel } from './NoteCollateralPanel';
 import { ReplicationProofPanel } from './ReplicationProofPanel';
 import { PositionsDashboard } from './PositionsDashboard';
 import { ScenarioSliders, type Scenario } from './ScenarioSliders';
@@ -267,6 +268,17 @@ export function Builder() {
             <StructureSummary quote={quote} quoteSource={quoteSource} />
             {quote ? <NoteAnalyticsPanel oracle={oracle} legs={quote.legs} premium={quote.totalCost} /> : null}
             {quote ? <ReplicationProofPanel legs={quote.legs} premium={quote.totalCost} target={sparseTarget} liveDigest={digest} /> : null}
+            {quote ? (
+              <NoteCollateralPanel
+                pkg={STUDIO_PACKAGE}
+                oracle={oracle}
+                legs={quote.legs}
+                shape={quoteMode === 'catalog' ? catalogId : quoteMode === 'draw' ? 'drawn_payoff' : quoteMode === 'intent' ? 'ai_intent' : template.kind}
+                premium={quote.totalCost}
+                maxPayout={quote.maxGain}
+                marketId={appConfig.collateralMarketId}
+              />
+            ) : null}
             <ShareNoteButton echo={intentEcho ?? quoteMode} target={sparseTarget} quote={quote} />
             {sparseTarget ? <SolverInspector oracle={oracle} target={sparseTarget} /> : null}
             <Backtester legs={quote?.legs ?? []} premium={quote?.totalCost ?? 0} oracle={oracle} />

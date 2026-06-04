@@ -89,6 +89,16 @@ module predict_studio::studio {
     public fun leg_count(self: &StructuredPosition): u64 { self.legs.length() }
     public fun is_settled(self: &StructuredPosition): bool { self.settled }
     public fun shape(self: &StructuredPosition): &String { &self.shape }
+    public fun expiry_ms(self: &StructuredPosition): u64 { self.expiry_ms }
+
+    /// Provable collateral ceiling: a long-only basket pays at most `max_payout(&legs)`
+    /// at settlement, with no oracle dependency. Equals `max_gain` (set at mint).
+    public fun max_payout_of(self: &StructuredPosition): u64 { self.max_gain }
+
+    /// Provable collateral floor: a long-only basket can expire worthless, so the
+    /// chain-guaranteed minimum payout is 0. Borrowing against a note is therefore a
+    /// liquidation-light *reclaim bridge*, never a margin position (see studio_collateral).
+    public fun provable_floor(_self: &StructuredPosition): u64 { 0 }
 
     public fun new_leg(
         is_range: bool, is_up: bool, lower_strike: u64, higher_strike: u64, quantity: u64,
@@ -428,6 +438,37 @@ module predict_studio::studio {
             max_gain,
             settled: false,
         }
+    }
+
+    #[test_only]
+    public fun new_for_testing_with_expiry(
+        manager_id: ID,
+        oracle_id: ID,
+        expiry_ms: u64,
+        shape: String,
+        legs: vector<Leg>,
+        premium_paid: u64,
+        ctx: &mut TxContext,
+    ): StructuredPosition {
+        let max_gain = max_payout(&legs);
+        StructuredPosition {
+            id: object::new(ctx),
+            owner: tx_context::sender(ctx),
+            manager_id,
+            oracle_id,
+            expiry_ms,
+            shape,
+            legs,
+            premium_paid,
+            max_loss: premium_paid,
+            max_gain,
+            settled: false,
+        }
+    }
+
+    #[test_only]
+    public fun set_settled_for_testing(self: &mut StructuredPosition, settled: bool) {
+        self.settled = settled;
     }
 
     #[test_only]

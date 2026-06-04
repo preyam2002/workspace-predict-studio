@@ -1,10 +1,14 @@
 module predict_studio::studio_collateral {
     use predict_studio::{
+        studio::{Self, StructuredPosition},
         studio_lp::STUDIO_LP,
         vault::{Self as vault, DUSDC_T},
     };
+    use deepbook_predict::{oracle::OracleSVI, predict::Predict};
+    use std::option::{Self, Option};
     use sui::{
         balance::{Self, Balance},
+        clock::Clock,
         coin::{Self, Coin},
         object::{Self, UID},
         tx_context::{Self, TxContext},
@@ -21,6 +25,9 @@ module predict_studio::studio_collateral {
     const EOverRepay: u64 = 7;
     const EFloorTooHigh: u64 = 8;
     const EVaultNotIdle: u64 = 9;
+    const ENoteSettled: u64 = 10;
+    const ENoteNotOwner: u64 = 11;
+    const EWrongCollateralKind: u64 = 12;
 
     public struct CollateralMarket has key, store {
         id: UID,
@@ -35,6 +42,8 @@ module predict_studio::studio_collateral {
         market_id: ID,
         owner: address,
         collateral_shares: u64,
+        /// Set for note-backed borrows; `none` for the share-backed path.
+        note: Option<StructuredPosition>,
         floor_value: u64,
         debt: u64,
     }
@@ -79,9 +88,67 @@ module predict_studio::studio_collateral {
             market_id: object::id(market),
             owner: tx_context::sender(ctx),
             collateral_shares: shares,
+            note: option::none(),
             floor_value,
             debt: 0,
         }
+    }
+
+    /// Provable collateral value of a note: its live redeemable bid (`marked_value`),
+    /// capped by the chain-provable ceiling `max_payout`. Never over-credits the
+    /// best case, and is computed on-chain from the oracle so a borrower can't inflate it.
+    public fun note_collateral_value(
+        note: &StructuredPosition,
+        predict: &Predict,
+        oracle: &OracleSVI,
+        clock: &Clock,
+    ): u64 {
+        let marked = studio::marked_value(predict, oracle, note, clock);
+        let ceiling = studio::max_payout_of(note);
+        if (marked < ceiling) marked else ceiling
+    }
+
+    /// Lock an owned `StructuredPosition` as collateral and open a borrow against it.
+    /// Capacity = `ltv * min(marked_bid, max_payout)`. The note is escrowed inside the
+    /// `BorrowPosition` and handed back verbatim by `close_note` once debt is cleared.
+    /// This is a reclaim bridge, not leverage: `max loss` on the note stays the premium
+    /// paid, and a settled note is rejected (no borrowing once it can resolve).
+    public fun open_note_position(
+        market: &CollateralMarket,
+        note: StructuredPosition,
+        predict: &Predict,
+        oracle: &OracleSVI,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): BorrowPosition {
+        assert!(studio::owner(&note) == tx_context::sender(ctx), ENoteNotOwner);
+        assert!(!studio::is_settled(&note), ENoteSettled);
+        let value = note_collateral_value(&note, predict, oracle, clock);
+        assert!(value > 0, EZeroFloor);
+        BorrowPosition {
+            id: object::new(ctx),
+            market_id: object::id(market),
+            owner: tx_context::sender(ctx),
+            collateral_shares: 0,
+            note: option::some(note),
+            floor_value: value,
+            debt: 0,
+        }
+    }
+
+    /// Repay-to-reclaim: return the escrowed note verbatim once debt is zero.
+    public fun close_note(
+        position: BorrowPosition,
+        ctx: &mut TxContext,
+    ): StructuredPosition {
+        let BorrowPosition { id, market_id: _, owner, collateral_shares: _, mut note, floor_value: _, debt } = position;
+        assert!(tx_context::sender(ctx) == owner, ENotOwner);
+        assert!(debt == 0, EStillDebt);
+        assert!(option::is_some(&note), EWrongCollateralKind);
+        object::delete(id);
+        let recovered = option::extract(&mut note);
+        option::destroy_none(note);
+        recovered
     }
 
     public fun borrow(
@@ -111,9 +178,11 @@ module predict_studio::studio_collateral {
         position: BorrowPosition,
         ctx: &mut TxContext,
     ): Coin<STUDIO_LP> {
-        let BorrowPosition { id, market_id: _, owner, collateral_shares, floor_value: _, debt } = position;
+        let BorrowPosition { id, market_id: _, owner, collateral_shares, note, floor_value: _, debt } = position;
         assert!(tx_context::sender(ctx) == owner, ENotOwner);
         assert!(debt == 0, EStillDebt);
+        assert!(option::is_none(&note), EWrongCollateralKind);
+        option::destroy_none(note);
         object::delete(id);
         coin::take(&mut market.locked_collateral, collateral_shares, ctx)
     }
