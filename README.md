@@ -21,7 +21,7 @@ That receipt is then a primitive: it becomes vault shares, PT/YT tranches, lendi
   - `studio_lp.move` creates the real `STUDIO_LP` currency and publish-time share factory.
   - `vault.move` consumes that factory to create/share a depositable vault, mints `Coin<STUDIO_LP>` shares with virtual-share donation defense, pending deposits, HWM fees, scoped KeeperCap automation, capped publisher fees, signer-owned PredictManager escrow binding, and an escrow-backed strategy roll path.
   - `pt_yt.move` splits vault shares into PT/YT and conserves redemption value through the maturity waterfall.
-  - `studio_collateral.move` is an isolated dUSDC lending market against idle, vault-valued `Coin<STUDIO_LP>` collateral; borrowing is capped at `LTV * provable_floor`, and open-strategy vault shares are rejected until marked NAV settlement is wired.
+  - `studio_collateral.move` is an isolated dUSDC lending market. The **prime-broker path** lends against any owned `StructuredPosition` *note* — capacity = `LTV * min(live marked bid, max_payout)`, computed on-chain from the oracle so it can't be inflated and never exceeds the provable ceiling; a settled note is rejected, and the note is escrowed and handed back verbatim by `close_note` once debt clears. This is a defined-risk **reclaim bridge, not leverage**: max loss stays the premium paid (the chain-provable floor of a long-only note is 0, so we lend against the live mark, never the best case). `buildMintAndBorrowTx` runs mint → lock → borrow in a single PTB. A parallel share-collateral path lends against vault-valued `Coin<STUDIO_LP>`.
   - `rfq.move` verifies Ed25519 signatures over canonical BCS quote bytes, binds quotes to the canonical structure hash, enforces TTL, prevents replay, and exposes an atomic `fill_quote` path.
   - `note_kiosk.move` wraps bespoke notes as Kiosk-tradeable objects with a production TransferPolicy helper, capped royalty rule, and locked-sale enforcement.
 - TypeScript engine in `lib/`
@@ -37,7 +37,7 @@ That receipt is then a primitive: it becomes vault shares, PT/YT tranches, lendi
   - NL-first landing page with the expert builder moved to `/advanced`
   - live oracle panel
   - strategy picker, 12-product catalog, draw-any-payoff canvas, and scenario sliders
-  - payoff chart, per-note greeks, replication-proof panel, shareable Walrus-backed note URL, structure summary, solver inspector, mint action, vault market, tranches, creator leaderboard, portfolio grid, positions, and backtest
+  - payoff chart, per-note greeks, replication-proof panel, borrow-against-this-note (prime-broker) panel, shareable Walrus-backed note URL, structure summary, solver inspector, mint action, vault market, tranches, creator leaderboard, portfolio grid, positions, and backtest
   - mobile `/buy` PWA lane for the gasless AI-intent note flow
 - Scripts in `scripts/`
   - verify-first live gate checker for `/oracles`, `create_manager`, devInspect quote decoding, and local config generation
@@ -230,4 +230,4 @@ NEXT_PUBLIC_ORACLE_ID=0xd1569da6552c7878df9ce58a2f4456e4fc3aca38add4cea18f15f170
 - Confirm Enoki public API key, Google OAuth client, and private sponsor key.
 - Configure a secondary-market path: `NEXT_PUBLIC_CETUS_STUDIO_POOL_ID`, or 500 funded DEEP for the DeepBook Spot dry-run. The active wallet already has the `STUDIO_LP` coin object; DEEP remains the missing asset.
 - Record the 5-minute demo video, set `DEMO_VIDEO_URL`, submit to DeepSurge, and set `DEEPSURGE_SUBMISSION_URL`. Pyth, Walrus, deploy, mint, sample settlement, and vault settlement have fresh shell proof.
-- Top up SUI before long live-demo runs; wallet balance after deployment, setup, two mints, and two settlements is low.
+- Note-backed lending (K2) is code-complete and tested (Move + one-PTB client + UI panel); the live borrow loop needs a published `CollateralMarket` seeded with dUSDC (`create_and_share_market` + `deposit_liquidity`), available via a package upgrade. The core mint → roll → settle loop is already proven live above.
