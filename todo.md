@@ -4,7 +4,7 @@
 
 **One-liner pitch:** *The structured-note factory & marketplace on DeepBook Predict — describe your market view in English, get a fairly-priced defined-risk note, buy it gasless.*
 
-**Current state (2026-06-03):** Offline build complete and test-green (Move 44/44, vitest 125/125, tsc + next build clean). Engine, all Move modules, mesh integrations, AI front-door, greeks/payoff analytics, mobile buy-lane PWA, mainnet config shim, replication property tests, NL-first landing, replication-proof panel, shareable Walrus note URL, live testnet deploy/mint, and sample/vault settlement proof are done. **The remaining live gates are Enoki credentials, a funded/configured secondary-market path, demo video, and DeepSurge submission.** Detailed specs live in `docs/superpowers/plans/2026-05-31-predict-studio-completion.md`.
+**Current state (2026-06-05):** Build complete and test-green (**Move 48/48, vitest 129/129, next build clean**). Engine, all Move modules, mesh integrations, AI front-door, greeks/payoff analytics, mobile buy-lane PWA, mainnet config shim, replication property tests, NL-first landing, replication-proof panel, shareable Walrus note URL are done. **Live on testnet & verified on-chain: the core loop (deploy → mint → roll → settle → vault-settle, pkg `0xad53…`) AND the K2 prime-broker loop (mint → borrow → repay → reclaim, pkg `0x3925…`).** **The only remaining steps are human-only: the demo video and the DeepSurge submission** (optional polish: Enoki keys, secondary-market funding). Detailed specs: `docs/superpowers/plans/2026-05-31-predict-studio-completion.md` + `2026-06-04-predict-studio-k2-completion.md`.
 
 ---
 
@@ -81,7 +81,7 @@ Live IDs:
 | **2** | Enoki live smoke · secondary-market config/funding · video |
 | **3** | P4 video + final README/digests · tag `v1.0-overflow` · submit (2-day buffer) |
 
-**Critical-path reminder:** deploy, mint, sample settlement, and vault settlement are live. The next proof is Enoki + secondary-market config, then the video/submission.
+**Critical-path reminder:** all on-chain proof is live — core loop (deploy/mint/roll/settle) **and** the K2 prime-broker loop (mint/borrow/repay/reclaim). No offline coding remains. The only blockers to submission are the **demo video** and the **DeepSurge submission** (both human-only); Enoki + secondary-market funding are optional polish.
 
 ---
 
@@ -89,18 +89,14 @@ Live IDs:
 
 Distilled from a strategy session. Full executable spec: `docs/superpowers/plans/2026-06-04-predict-studio-k2-completion.md`. Centerpiece below; remaining work is the external submission gates.
 
-**The one highest-value enhancement — K2 collateral fold-in (the new demo spine):** ✅ **Phase 1 core implemented 2026-06-05 (Move 47/47, vitest 129/129, build clean).** `open_note_position`/`close_note`/`note_collateral_value` + `buildMintAndBorrowTx` (one PTB) + `NoteCollateralPanel`. Basis = on-chain `min(marked_bid, max_payout)` (the sound, ungameable version — see plan), framed as a repay-to-reclaim bridge, `max loss = premium` preserved. Remaining: 🔒 deploy a `CollateralMarket` + live `collateral:demo` digests + `hackathon:status` gate.
-- [x] Turn `studio_collateral.move` from "lends dUSDC against idle vault shares only" into "lends dUSDC against ANY owned `StructuredPosition` note, capped at the note's provably-bounded worst-case value."
-- [ ] The provable floor is on-chain and already computable: a long-only basket pays **at most `studio::max_payout(legs)` and at least 0** at settlement — a knowable ceiling/floor with no oracle needed. Bounded vertical-range legs are `[0, max_payout]` by construction; the per-note `max_gain` field is exactly `max_payout(&legs)`. Borrow capacity = `LTV * provable_floor` where the conservative floor is `0` and the collateral-valuation ceiling is `max_payout`; the live redeemable value is `studio::marked_value(predict, oracle, pos, clock)` (bid side).
-- [ ] This requires wiring **marked-NAV settlement** so positions that are *currently rejected* as collateral (open, non-idle) become eligible: value the locked note by its marked bid (already implemented as `studio::marked_value`) and/or its bounded `max_payout`, instead of the existing `EVaultNotIdle` rejection on vault shares.
-- [ ] New live demo beat (replaces the share-deposit beat as the depth climax): **build a defined-risk note in English → in the SAME PTB borrow dUSDC against its provable floor → repay → reclaim the note.** Upgrades the pitch from "a builder of notes" to "a builder AND a mini prime-broker for Predict" — strongest real-world + composability story, ~70% of the code already exists (`max_payout`, `marked_value`, `StructuredPosition` wrapper, `CollateralMarket`, `BorrowPosition`, `collateral-client.ts`).
+**The one highest-value enhancement — K2 collateral fold-in (the new demo spine): ✅ DONE + PROVEN LIVE ON TESTNET (2026-06-05, commit `7439abb`).**
+- [x] Note-backed lending: `open_note_position`/`borrow_note`/`repay_note`/`close_note`/`note_collateral_value`, generic over the quote coin (`NoteCollateralMarket<Q>`) so it holds the **real** deepbook dUSDC — found and fixed the phantom `vault::DUSDC_T` type that blocked real funding. One-PTB `buildMintAndBorrowTx` + `NoteCollateralPanel`. Basis = on-chain `min(marked_bid, max_payout)` (sound, ungameable; reclaim-bridge, `max loss = premium`). 3 new Move tests; share path untouched.
+- [x] Live full loop vs real dUSDC (all `status=success`): publish `0x3925e5…` (`5Pqvhqk3…`) · create `NoteCollateralMarket<dUSDC>` `0x22f9ed4a…` 50% LTV (`2XkV5RWi…`) · seed 2 dUSDC (`6G4zMt9P…`) · **mint+lock+borrow one PTB** (`J1tUZaHP…`, NoteBorrow `0x53a04b…`) · **repay+reclaim verbatim** (`3Zx1QbGh…`, note `0xd87058…`). `pnpm collateral:demo` prints these; `deploy.json` → `k2_note_lending`.
+- [x] Demo beat is now real: **build a note in English → borrow dUSDC against its provable value in the SAME PTB → repay → reclaim.** "A builder AND a mini prime-broker for Predict."
 
-**Why this collapses the standalone "borrow against a Predict position" idea into Predict Studio:**
-- [ ] Predict positions are **non-transferable** (owner-bound table rows inside `PredictManager`) → they cannot be used as collateral directly. The only collateralizable object is the ownable `StructuredPosition` wrapper, which Predict Studio already mints. So "Lumen / borrow against a Predict position" has no standalone surface — it *is* Predict Studio.
+**Why this collapsed the standalone "borrow against a Predict position" idea into Predict Studio:** Predict positions are **non-transferable** (owner-bound rows in `PredictManager`); only the ownable `StructuredPosition` wrapper can be collateral — so it *is* Predict Studio, not a separate project.
 
-**Guardrails (do not violate):**
-- [ ] **Margin stays excluded.** Keep the clean `max loss = premium` invariant. Predict has zero margin references. Mention margin only as a one-line roadmap item, never build it.
-- [ ] Don't over-build new surface area. The win is making existing depth *live* plus the collateral demo — not new primitives.
+**Guardrails honored:** Margin stays excluded (`max loss = premium` intact; margin is a one-line roadmap item only). No new speculative surface — the win was making existing depth *live*.
 
 **Already done this session (do NOT redo):**
 - [x] README opener sharpened (the $100M-options-gap wedge + spine).
