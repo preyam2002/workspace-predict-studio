@@ -111,11 +111,13 @@ export class CollateralClient {
 
     const position = tx.moveCall({
       target: `${this.pkg}::studio_collateral::open_note_position`,
+      typeArguments: [p.dusdcType],
       arguments: [tx.object(p.marketId), note, tx.object(p.predictId), tx.object(p.oracleId), tx.object('0x6')],
     });
 
     const borrowed = tx.moveCall({
-      target: `${this.pkg}::studio_collateral::borrow`,
+      target: `${this.pkg}::studio_collateral::borrow_note`,
+      typeArguments: [p.dusdcType],
       arguments: [tx.object(p.marketId), position, tx.pure.u64(p.borrowAmount)],
     });
 
@@ -125,10 +127,11 @@ export class CollateralClient {
   }
 
   /** Repay-to-reclaim: settle the debt then take the escrowed note back. */
-  buildCloseNoteTx(ids: CollateralMarketIds, positionId: string): Transaction {
+  buildCloseNoteTx(ids: CollateralMarketIds, dusdcType: string, positionId: string): Transaction {
     const tx = new Transaction();
     const note = tx.moveCall({
       target: `${this.pkg}::studio_collateral::close_note`,
+      typeArguments: [dusdcType],
       arguments: [tx.object(positionId)],
     });
     tx.transferObjects([note], tx.pure.address(ids.recipient));

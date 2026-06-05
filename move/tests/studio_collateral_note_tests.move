@@ -1,6 +1,6 @@
 #[test_only]
 module predict_studio::studio_collateral_note_tests {
-    use predict_studio::{studio, studio_collateral, vault};
+    use predict_studio::{studio, studio_collateral};
     use deepbook_predict::{
         i64,
         oracle::{Self as oracle, OracleSVI, OracleSVICap},
@@ -162,12 +162,12 @@ module predict_studio::studio_collateral_note_tests {
             assert!(value > 0, 0);
             assert!(studio::provable_floor(&note) == 0, 1);
 
-            let mut market = studio_collateral::new_for_testing(5_000, scenario.ctx());
-            studio_collateral::deposit_liquidity(
+            let mut market = studio_collateral::new_note_market_for_testing<TEST_USDC>(5_000, scenario.ctx());
+            studio_collateral::deposit_note_liquidity<TEST_USDC>(
                 &mut market,
-                coin::mint_for_testing<vault::DUSDC_T>(10_000_000, scenario.ctx()),
+                coin::mint_for_testing<TEST_USDC>(10_000_000, scenario.ctx()),
             );
-            let mut position = studio_collateral::open_note_position(
+            let mut position = studio_collateral::open_note_position<TEST_USDC>(
                 &market,
                 note,
                 &predict,
@@ -177,17 +177,17 @@ module predict_studio::studio_collateral_note_tests {
             );
 
             let capacity = value * 5_000 / 10_000;
-            assert!(studio_collateral::borrow_capacity(&position, &market) == capacity, 2);
-            let borrowed = studio_collateral::borrow(&mut market, &mut position, capacity, scenario.ctx());
+            assert!(studio_collateral::note_borrow_capacity(&position, &market) == capacity, 2);
+            let borrowed = studio_collateral::borrow_note<TEST_USDC>(&mut market, &mut position, capacity, scenario.ctx());
             assert!(coin::value(&borrowed) == capacity, 3);
-            studio_collateral::repay(&mut market, &mut position, borrowed);
-            assert!(studio_collateral::debt(&position) == 0, 4);
+            studio_collateral::repay_note<TEST_USDC>(&mut market, &mut position, borrowed);
+            assert!(studio_collateral::note_debt(&position) == 0, 4);
 
-            let reclaimed = studio_collateral::close_note(position, scenario.ctx());
+            let reclaimed = studio_collateral::close_note<TEST_USDC>(position, scenario.ctx());
             assert!(object::id(&reclaimed) == note_id, 5);
 
             studio::destroy_for_testing(reclaimed);
-            studio_collateral::destroy_for_testing(market);
+            studio_collateral::destroy_note_market_for_testing<TEST_USDC>(market);
             clock_obj.destroy_for_testing();
             test_scenario::return_shared(oracle);
             test_scenario::return_shared(predict);
@@ -222,12 +222,12 @@ module predict_studio::studio_collateral_note_tests {
             let ceiling = studio::max_payout_of(&note);
             let value = if (marked < ceiling) marked else ceiling;
 
-            let mut market = studio_collateral::new_for_testing(5_000, scenario.ctx());
-            studio_collateral::deposit_liquidity(
+            let mut market = studio_collateral::new_note_market_for_testing<TEST_USDC>(5_000, scenario.ctx());
+            studio_collateral::deposit_note_liquidity<TEST_USDC>(
                 &mut market,
-                coin::mint_for_testing<vault::DUSDC_T>(10_000_000, scenario.ctx()),
+                coin::mint_for_testing<TEST_USDC>(10_000_000, scenario.ctx()),
             );
-            let mut position = studio_collateral::open_note_position(
+            let mut position = studio_collateral::open_note_position<TEST_USDC>(
                 &market,
                 note,
                 &predict,
@@ -237,12 +237,12 @@ module predict_studio::studio_collateral_note_tests {
             );
 
             let over = value * 5_000 / 10_000 + 1;
-            let borrowed = studio_collateral::borrow(&mut market, &mut position, over, scenario.ctx());
+            let borrowed = studio_collateral::borrow_note<TEST_USDC>(&mut market, &mut position, over, scenario.ctx());
 
-            studio_collateral::repay(&mut market, &mut position, borrowed);
-            let reclaimed = studio_collateral::close_note(position, scenario.ctx());
+            studio_collateral::repay_note<TEST_USDC>(&mut market, &mut position, borrowed);
+            let reclaimed = studio_collateral::close_note<TEST_USDC>(position, scenario.ctx());
             studio::destroy_for_testing(reclaimed);
-            studio_collateral::destroy_for_testing(market);
+            studio_collateral::destroy_note_market_for_testing<TEST_USDC>(market);
             clock_obj.destroy_for_testing();
             test_scenario::return_shared(oracle);
             test_scenario::return_shared(predict);
@@ -268,8 +268,8 @@ module predict_studio::studio_collateral_note_tests {
             let mut note = make_note(&oracle, scenario.ctx());
             studio::set_settled_for_testing(&mut note, true);
 
-            let market = studio_collateral::new_for_testing(5_000, scenario.ctx());
-            let position = studio_collateral::open_note_position(
+            let market = studio_collateral::new_note_market_for_testing<TEST_USDC>(5_000, scenario.ctx());
+            let position = studio_collateral::open_note_position<TEST_USDC>(
                 &market,
                 note,
                 &predict,
@@ -278,9 +278,9 @@ module predict_studio::studio_collateral_note_tests {
                 scenario.ctx(),
             );
 
-            let reclaimed = studio_collateral::close_note(position, scenario.ctx());
+            let reclaimed = studio_collateral::close_note<TEST_USDC>(position, scenario.ctx());
             studio::destroy_for_testing(reclaimed);
-            studio_collateral::destroy_for_testing(market);
+            studio_collateral::destroy_note_market_for_testing<TEST_USDC>(market);
             clock_obj.destroy_for_testing();
             test_scenario::return_shared(oracle);
             test_scenario::return_shared(predict);

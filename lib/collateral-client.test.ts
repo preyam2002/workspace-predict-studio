@@ -11,7 +11,7 @@ describe('CollateralClient', () => {
     expect(() => client.buildBorrowTx(ids, '0xposition', 400_000)).not.toThrow();
     expect(() => client.buildRepayTx(ids.marketId, '0xposition', '0xdusdc')).not.toThrow();
     expect(() => client.buildCloseTx(ids, '0xposition')).not.toThrow();
-    expect(() => client.buildCloseNoteTx(ids, '0xposition')).not.toThrow();
+    expect(() => client.buildCloseNoteTx(ids, '0xdusdc::dusdc::DUSDC', '0xposition')).not.toThrow();
   });
 
   it('chains mint -> lock-note -> borrow in a single PTB without network IO', () => {
