@@ -91,6 +91,20 @@ sample settle:    3bafswkWphUEzUFkeCvfArhFe78ndcPgvgYoZyrLYCra payout=0 pnl=-524
 vault settle:     7cGNwsGmo2i7wnogcKtf4869a1HrHM6dPiMqH3qMRLqR payout=1000000 pnl=+472196
 ```
 
+### K2 prime-broker: live note-backed lending (mint → borrow → repay → reclaim)
+
+The note-lending market is generic over the quote coin, so it holds the **real** deepbook dUSDC. Captured on a fresh full-package publish (core + K2); the original `0xad53…` deploy above retains the core mint/roll/settle proof. Run `pnpm collateral:demo` to print these.
+
+```text
+package:          0x3925e59c067dbf176f6d4134427c1bd1332f5fb15c85a6df86f3465763ae0f24
+note market:      0x22f9ed4a57aaa281c967b3383b5377ca9ce13d5bab90e08e5260563425f5a556 (NoteCollateralMarket<dUSDC>, 50% LTV)
+create market:    2XkV5RWiaGyUbxErqY1a79AZFdjH38jX6Ek66xyYgb8p
+seed liquidity:   6G4zMt9PSjAyyV5tZYq8Gwu4cw6TLgvyZtKqKxccke4c (2 dUSDC from the funded manager)
+mint+lock+borrow: J1tUZaHP47HZFsw4XWz5e23Sg2KRyWyXmTSbLB2kptow (ONE PTB: mint note → escrow → borrow 0.001 dUSDC)
+repay+reclaim:    3Zx1QbGhrmNgheiF1xvDGFAaepbMTaCrG1hz8Kd6fZri (debt cleared → escrowed note returned verbatim)
+reclaimed note:   0xd87058d3ac7b5aa392371ad4eeb1ecdddba338a996ff4846d04ceee854b85427
+```
+
 The escrow-backed vault roll is live: `keeper_roll → fund_manager_from_idle → roll_into_strategy` minted vault position `0x6d1f4514a140dd35d548aa49292486e58cd7fe6a66366b244054fe1a5273b299` with premium/max loss `527804` and max gain `1000000`.
 
 Latest `pnpm bench` on the refreshed near-expiry oracle:
@@ -230,4 +244,4 @@ NEXT_PUBLIC_ORACLE_ID=0xd1569da6552c7878df9ce58a2f4456e4fc3aca38add4cea18f15f170
 - Confirm Enoki public API key, Google OAuth client, and private sponsor key.
 - Configure a secondary-market path: `NEXT_PUBLIC_CETUS_STUDIO_POOL_ID`, or 500 funded DEEP for the DeepBook Spot dry-run. The active wallet already has the `STUDIO_LP` coin object; DEEP remains the missing asset.
 - Record the 5-minute demo video, set `DEMO_VIDEO_URL`, submit to DeepSurge, and set `DEEPSURGE_SUBMISSION_URL`. Pyth, Walrus, deploy, mint, sample settlement, and vault settlement have fresh shell proof.
-- Note-backed lending (K2) is code-complete and tested (Move + one-PTB client + UI panel); the live borrow loop needs a published `CollateralMarket` seeded with dUSDC (`create_and_share_market` + `deposit_liquidity`), available via a package upgrade. The core mint → roll → settle loop is already proven live above.
+- Note-backed lending (K2) is **live**: a real-dUSDC `NoteCollateralMarket` is deployed and the full mint → borrow → repay → reclaim loop is proven on testnet (digests above; `pnpm collateral:demo`).
