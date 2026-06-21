@@ -6,6 +6,9 @@ import {
   summarizeImportantBalances,
   type BalanceSummaryInput,
 } from '../lib/address-inventory';
+import { applyScriptEnv } from '../lib/script-env';
+
+applyScriptEnv();
 
 interface RpcResponse<T> {
   result?: T;
@@ -28,7 +31,7 @@ interface CoinPage {
   hasNextPage?: boolean;
 }
 
-const RPC_URL = process.env.SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
+const RPC_URL = process.env.SUI_RPC_URL ?? process.env.SUI_RPC ?? 'https://fullnode.testnet.sui.io:443';
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   const response = await fetch(RPC_URL, {
@@ -41,8 +44,12 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   return body.result as T;
 }
 
+function suiClientArgs(args: string[]): string[] {
+  return ['client', ...(process.env.SUI_CLIENT_CONFIG ? ['--client.config', process.env.SUI_CLIENT_CONFIG] : []), ...args];
+}
+
 function addressBook(): AddressBook {
-  return JSON.parse(execFileSync('sui', ['client', 'addresses', '--json'], { encoding: 'utf8' })) as AddressBook;
+  return JSON.parse(execFileSync('sui', suiClientArgs(['addresses', '--json']), { encoding: 'utf8' })) as AddressBook;
 }
 
 async function allBalances(address: string): Promise<BalanceSummaryInput[]> {

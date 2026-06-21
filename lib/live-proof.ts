@@ -15,6 +15,16 @@ export interface LiveProofDeployInfo {
   vaultSettlePayout?: string;
   vaultSettlePnlIsGain?: boolean;
   vaultSettlePnlAbs?: string;
+  k2_note_lending?: {
+    collateralPackageId?: string;
+    noteCollateralMarketId?: string;
+    marketCreateDigest?: string;
+    seedWithdrawDigest?: string;
+    mintBorrowDigest?: string;
+    noteBorrowId?: string;
+    repayReclaimDigest?: string;
+    reclaimedNoteId?: string;
+  };
 }
 
 function value(input: string | undefined): string {
@@ -32,7 +42,7 @@ function settleLine(digest: string | undefined, payout: string | undefined, isGa
 }
 
 export function formatLiveProof(deploy: LiveProofDeployInfo): string {
-  return [
+  const lines = [
     'Live proof summary',
     `package:          ${value(deploy.packageId)}`,
     `manager:          ${value(deploy.managerId)}`,
@@ -54,5 +64,18 @@ export function formatLiveProof(deploy: LiveProofDeployInfo): string {
       deploy.vaultSettlePnlIsGain,
       deploy.vaultSettlePnlAbs,
     )}`,
-  ].join('\n');
+  ];
+  if (deploy.k2_note_lending) {
+    lines.push(
+      `k2 package:       ${value(deploy.k2_note_lending.collateralPackageId)}`,
+      `k2 note market:   ${value(deploy.k2_note_lending.noteCollateralMarketId)}`,
+      `k2 create market: ${value(deploy.k2_note_lending.marketCreateDigest)}`,
+      `k2 seed market:   ${value(deploy.k2_note_lending.seedWithdrawDigest)}`,
+      `k2 mint+borrow:   ${value(deploy.k2_note_lending.mintBorrowDigest)}`,
+      `k2 note borrow:   ${value(deploy.k2_note_lending.noteBorrowId)}`,
+      `k2 repay+reclaim: ${value(deploy.k2_note_lending.repayReclaimDigest)}`,
+      `k2 reclaimed note: ${value(deploy.k2_note_lending.reclaimedNoteId)}`,
+    );
+  }
+  return lines.join('\n');
 }

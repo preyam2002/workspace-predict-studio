@@ -28,6 +28,12 @@ export function getOracles(): Promise<IndexerOracle[]> {
   return get<IndexerOracle[]>('/oracles');
 }
 
+export function activeOracleChoices(oracles: IndexerOracle[], asset = 'BTC', nowMs = Date.now()) {
+  return oracles
+    .filter((oracle) => oracle.underlying_asset === asset && oracle.status === 'active' && Number(oracle.expiry) > nowMs)
+    .sort((a, b) => Number(a.expiry) - Number(b.expiry));
+}
+
 export function getManagerPositions(id: string) {
   return get(`/managers/${id}/positions/summary`);
 }
@@ -90,6 +96,7 @@ export function publisherLeaderboardFromEvents(events: EventLike[]): PublisherRa
       const volume =
         numberField(fields, 'volume') ??
         numberField(fields, 'premium_paid') ??
+        numberField(fields, 'amount') ?? // note_kiosk::RoyaltyPaid carries the royalty as `amount`
         (feePaid !== undefined && feeBps ? Math.floor((feePaid * 10_000) / feeBps) : undefined);
       if (volume === undefined) return [];
 
@@ -108,12 +115,18 @@ export async function getPublisherLeaderboard(
   client: EventClient,
   studioPackage: string,
   limit = 50,
+  kioskPackage?: string,
 ): Promise<PublisherRank[]> {
   const eventTypes = [
     `${studioPackage}::studio::PublisherFeePaid`,
     `${studioPackage}::vault::PublisherFeePaid`,
     `${studioPackage}::note_kiosk::RoyaltyPaid`,
   ];
+  // Kiosk royalties live on a dedicated package (with the Publisher-claiming init); include
+  // its RoyaltyPaid stream so real creator-note resales show up on the leaderboard.
+  if (kioskPackage && kioskPackage !== studioPackage) {
+    eventTypes.push(`${kioskPackage}::note_kiosk::RoyaltyPaid`);
+  }
   const results = await Promise.allSettled(
     eventTypes.map((eventType) =>
       client.queryEvents({

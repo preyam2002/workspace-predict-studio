@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCreateCetusPoolWithPriceTx,
   cetusMarketConfigFromEnv,
-  mockCetusSecondaryPrice,
   navDiscountPct,
   quoteConstantProductExit,
   readCetusSecondaryPrice,
+  unconfiguredCetusSecondaryMarket,
   verifyCetusDeployment,
 } from './cetus';
 import { builderFee, capacityCappedBuilderFee, rankPublishers } from './creator';
@@ -109,7 +109,7 @@ describe('composability helpers', () => {
     expect(navDiscountPct(1, 0.95)).toBeCloseTo(-5);
   });
 
-  it('builds Cetus market config from public env and labels mock fallback honestly', () => {
+  it('builds Cetus market config from public env and reports missing config without a mock price', () => {
     expect(cetusMarketConfigFromEnv({})).toBeUndefined();
     expect(
       cetusMarketConfigFromEnv({
@@ -126,7 +126,10 @@ describe('composability helpers', () => {
       quoteDecimals: 6,
       env: 'testnet',
     });
-    expect(mockCetusSecondaryPrice().source).toBe('mock');
+    expect(unconfiguredCetusSecondaryMarket()).toEqual({
+      source: 'unconfigured',
+      reason: 'missing STUDIO_LP/dUSDC Cetus pool config',
+    });
   });
 
   it('verifies Cetus testnet deployment from SDK config and a sample pool', async () => {

@@ -1,6 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { buildSettleVaultPtbArgs, oracleSettlementStatus, parseSuiJsonOutput, vaultStrategyStatus } from '../lib/settle-sample';
+import { applyScriptEnv } from '../lib/script-env';
+
+applyScriptEnv();
 
 type JsonObject = Record<string, unknown>;
 
@@ -32,8 +35,13 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
+function suiArgs(args: string[]): string[] {
+  if (args[0] !== 'client' || !process.env.SUI_CLIENT_CONFIG) return args;
+  return ['client', '--client.config', process.env.SUI_CLIENT_CONFIG, ...args.slice(1)];
+}
+
 function readObject(id: string): JsonObject {
-  return JSON.parse(execFileSync('sui', ['client', 'object', id, '--json'], { encoding: 'utf8' })) as JsonObject;
+  return JSON.parse(execFileSync('sui', suiArgs(['client', 'object', id, '--json']), { encoding: 'utf8' })) as JsonObject;
 }
 
 function requireValue(value: string | undefined, label: string): string {
@@ -76,7 +84,7 @@ if (!settlement.settled && !force) {
   console.log(`oracle_not_settled\t${oracleId}\tposition=${strategy.positionId ?? 'unknown'}\texpiry=${settlement.expiryMs ?? 'unknown'}`);
 } else {
   const args = buildSettleVaultPtbArgs({ ...input, oracleId }, { execute });
-  const result = parseSuiJsonOutput<JsonObject>(execFileSync('sui', args, { encoding: 'utf8' }));
+  const result = parseSuiJsonOutput<JsonObject>(execFileSync('sui', suiArgs(args), { encoding: 'utf8' }));
   const digest =
     (result.digest as string | undefined) ??
     ((result.effects as { transactionDigest?: string } | undefined)?.transactionDigest as string | undefined);

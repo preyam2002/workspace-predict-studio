@@ -1,6 +1,7 @@
 'use client';
 
 import { Layers, TrendingUp } from 'lucide-react';
+import { maxGain } from '@/lib/payoff';
 import { USDC, type Leg, type StructureQuote } from '@/lib/types';
 
 function usd(value: number) {
@@ -16,10 +17,12 @@ export function StructureSummary({ quote, quoteSource }: { quote?: StructureQuot
     return (
       <section className="panel p-4">
         <div className="metric-label">Structure</div>
-        <div className="mt-2 text-sm text-[#8c96a8]">Waiting for oracle and quote data.</div>
+        <div className="mt-2 text-sm muted-text">Waiting for oracle and quote data.</div>
       </section>
     );
   }
+
+  const grossPayout = maxGain(quote.legs, 0);
 
   return (
     <section className="panel p-4">
@@ -33,19 +36,20 @@ export function StructureSummary({ quote, quoteSource }: { quote?: StructureQuot
           {quote.legs.length} legs
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
         <Metric label="Premium" value={usd(quote.totalCost)} tone="warn-text" />
         <Metric label="Max Loss" value={usd(quote.maxLoss)} tone="danger-text" />
-        <Metric label="Max Gain" value={usd(quote.maxGain)} tone="good-text" />
+        <Metric label="Gross payout" value={usd(grossPayout)} tone="blue-text" />
+        <Metric label="Net Max Gain" value={usd(quote.maxGain)} tone="good-text" />
         <Metric label="EV" value={usd(quote.ev)} tone={quote.ev >= 0 ? 'good-text' : 'danger-text'} />
-        <Metric label="Saved" value={usd(quote.savingsVsNaive)} tone="blue-text" />
+        <Metric label="Saved" value={usd(quote.savingsVsNaive)} tone="volt-text" />
       </div>
       <div className="mt-4 grid gap-2">
         {quote.legs.map((leg, index) => (
           <LegRow key={`${leg.lowerStrike}-${leg.higherStrike}-${index}`} leg={leg} index={index} />
         ))}
       </div>
-      <div className="mt-3 flex items-center gap-2 text-xs text-[#8c96a8]">
+      <div className="mt-3 flex items-center gap-2 text-xs muted-text">
         <TrendingUp size={14} />
         Quote source: {quoteSource}
       </div>

@@ -1,17 +1,44 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   PREDICT STUDIO — quiet terminal
+   Near-black desk, hairline structure, one restrained accent. No glow, no
+   grid, no scanlines: hierarchy and tabular numerics carry the weight.
+   ========================================================================== */
+
 :root {
   color-scheme: dark;
-  --bg: #080a0f;
-  --panel: #10151d;
-  --panel-2: #151b25;
-  --line: rgba(228, 232, 240, 0.12);
-  --muted: #8c96a8;
-  --text: #edf2f8;
-  --amber: #f6b44b;
-  --blue: #58a6ff;
-  --green: #3ddc97;
-  --red: #ff6b6b;
+
+  /* Surfaces — a calm near-black ramp */
+  --bg: #0a0b0d;
+  --panel: #101317;
+  --panel-2: #161a20;
+  --panel-3: #0d1014;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+
+  /* Text */
+  --text: #f0f2f1;
+  --muted: #8b938f;
+  --muted-2: #5e6663;
+
+  /* Accent — toned chartreuse, used sparingly. Semantics stay calm. */
+  --volt: #bce152;          /* brand accent — the only loud hue */
+  --volt-dim: #9bbe3f;
+  --cyan: #6cc6d2;          /* secondary signal */
+  --green: #43cf95;         /* up */
+  --red: #f06d72;           /* down */
+  --amber: #e8ad4f;
+  --blue: #6cc6d2;          /* legacy alias → cyan */
+
+  /* No glow. Kept as no-ops so existing references stay valid. */
+  --glow-volt: 0 0 0 0 transparent;
+  --glow-cyan: 0 0 0 0 transparent;
+
+  /* Type ramps — wired in layout.tsx via next/font */
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-hanken), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 * {
@@ -24,16 +51,50 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-feature-settings: "ss01", "cv01";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em;
 }
 
+/* Atmosphere: a single, barely-there cool wash from the top. No grid, no
+   scanlines, no neon bloom. */
 body {
+  position: relative;
   background:
-    linear-gradient(180deg, rgba(88, 166, 255, 0.08), transparent 280px),
-    radial-gradient(circle at 20% 0%, rgba(246, 180, 75, 0.12), transparent 320px),
+    radial-gradient(140% 70% at 50% -20%, rgba(188, 225, 82, 0.035), transparent 55%),
     var(--bg);
+}
+
+/* Keep app content above the wash */
+.app-shell,
+.buy-shell {
+  position: relative;
+  z-index: 1;
+}
+
+/* Display headings */
+h1,
+h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  line-height: 1.04;
+}
+
+h1 {
+  font-weight: 800;
+}
+
+/* All numerics in mono, tabular */
+.metric-value,
+input,
+select,
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 button,
@@ -48,81 +109,131 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
+/* ----------------------------------------------------------------------------
+   Layout shells
+   -------------------------------------------------------------------------- */
 .app-shell {
   width: min(1480px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 20px 0 32px;
+  padding: 28px 0 64px;
 }
 
 .buy-shell {
-  width: min(560px, calc(100vw - 20px));
+  width: min(900px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 12px 0 28px;
+  padding: 24px 0 56px;
 }
 
+/* ----------------------------------------------------------------------------
+   Panels & surfaces — flat, hairline-framed, soft seated shadow
+   -------------------------------------------------------------------------- */
 .panel {
+  position: relative;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-  border-radius: 8px;
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 16px 40px -32px rgba(0, 0, 0, 0.85);
 }
 
 .surface {
   border: 1px solid var(--line);
   background: var(--panel-2);
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
+/* ----------------------------------------------------------------------------
+   Metric typography
+   -------------------------------------------------------------------------- */
 .metric-label {
   color: var(--muted);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   line-height: 1.2;
   text-transform: uppercase;
-  letter-spacing: 0;
+  letter-spacing: 0.11em;
 }
 
 .metric-value {
   color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
 
+/* ----------------------------------------------------------------------------
+   Form controls
+   -------------------------------------------------------------------------- */
 .control {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #0b1017;
+  border-radius: 10px;
+  background: var(--panel-3);
   color: var(--text);
-  padding: 9px 10px;
+  padding: 11px 13px;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .control:focus {
-  border-color: color-mix(in srgb, var(--blue) 80%, white 10%);
+  border-color: color-mix(in srgb, var(--volt) 55%, transparent);
+  box-shadow: 0 0 0 3px rgba(188, 225, 82, 0.1);
 }
 
+.control::placeholder {
+  color: var(--muted-2);
+}
+
+/* ----------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
 .icon-button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #0b1017;
+  border-radius: 10px;
+  background: var(--panel-2);
   color: var(--text);
-  padding: 8px 12px;
+  padding: 9px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.06s ease;
 }
 
 .icon-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--blue) 70%, white 10%);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--panel-2) 80%, var(--text));
+}
+
+.icon-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .primary-button {
-  border-color: color-mix(in srgb, var(--green) 70%, white 10%);
-  background: color-mix(in srgb, var(--green) 18%, #0b1017);
+  color: #10160a;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: var(--volt);
+  transition: background 0.15s ease, transform 0.06s ease;
 }
 
+.primary-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--volt) 88%, #fff);
+}
+
+.primary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ----------------------------------------------------------------------------
+   Color helpers (drive both .text usage and tone props)
+   -------------------------------------------------------------------------- */
 .danger-text {
   color: var(--red);
 }
@@ -136,13 +247,171 @@ button:disabled {
 }
 
 .blue-text {
-  color: var(--blue);
+  color: var(--cyan);
 }
 
+.volt-text {
+  color: var(--volt);
+}
+
+/* Muted text alias — replaces scattered inline text-[#8c96a8] */
+.muted-text {
+  color: var(--muted);
+}
+
+/* Accent numerals / chips — flat color, no glow */
+.glow-volt {
+  color: var(--volt);
+}
+
+.glow-cyan {
+  color: var(--cyan);
+}
+
+/* Brand wordmark */
+.brand-mark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+/* Small uppercase eyebrow chip */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+/* Status dot — quiet pulse, no glow */
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  animation: pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ----------------------------------------------------------------------------
+   Native range controls
+   -------------------------------------------------------------------------- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--volt);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--volt);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+/* Checkboxes pick up the accent */
+input[type="checkbox"] {
+  accent-color: var(--volt);
+}
+
+/* ----------------------------------------------------------------------------
+   dapp-kit ConnectButton — reskin to match the terminal
+   -------------------------------------------------------------------------- */
+[data-dapp-kit] button {
+  font-family: var(--font-mono) !important;
+  border-radius: 10px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   Page-load reveal — one quiet staggered entrance
+   -------------------------------------------------------------------------- */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-shell > *,
+.buy-shell > * {
+  animation: reveal 0.4s ease both;
+}
+
+.app-shell > *:nth-child(1),
+.buy-shell > *:nth-child(1) { animation-delay: 0.02s; }
+.app-shell > *:nth-child(2),
+.buy-shell > *:nth-child(2) { animation-delay: 0.07s; }
+.app-shell > *:nth-child(3),
+.buy-shell > *:nth-child(3) { animation-delay: 0.12s; }
+.app-shell > *:nth-child(4),
+.buy-shell > *:nth-child(4) { animation-delay: 0.17s; }
+.app-shell > *:nth-child(5),
+.buy-shell > *:nth-child(5) { animation-delay: 0.22s; }
+.app-shell > *:nth-child(n + 6),
+.buy-shell > *:nth-child(n + 6) { animation-delay: 0.27s; }
+
+/* Payoff stroke draws in cleanly — no glow filter */
+@keyframes stroke-draw {
+  from { stroke-dashoffset: 1400; }
+  to { stroke-dashoffset: 0; }
+}
+
+.payoff-glow .payoff-curve {
+  stroke-dasharray: 1400;
+  animation: stroke-draw 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > *,
+  .buy-shell > *,
+  .payoff-glow .payoff-curve,
+  .live-dot {
+    animation: none;
+  }
+  .payoff-glow .payoff-curve {
+    stroke-dasharray: none;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
 @media (max-width: 760px) {
   .app-shell {
     width: min(100vw - 20px, 760px);
-    padding-top: 12px;
+    padding-top: 18px;
   }
 
   .icon-button {

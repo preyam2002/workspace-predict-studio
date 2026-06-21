@@ -121,16 +121,10 @@ function TemplateFields({
         <>
           <NumericField label="Strike" value={template.K} onChange={(K) => onChange({ ...template, K })} />
           <NumericField
-            label="Payoff $"
+            label="Gross payout $"
             value={template.payoffUsd}
             moneyScale={false}
             onChange={(payoffUsd) => onChange({ ...template, payoffUsd })}
-          />
-          <NumericField
-            label="Max Loss $"
-            value={template.maxLossUsd}
-            moneyScale={false}
-            onChange={(maxLossUsd) => onChange({ ...template, maxLossUsd })}
           />
         </>
       );
@@ -139,7 +133,7 @@ function TemplateFields({
         <>
           <NumericField label="Put Strike" value={template.kLo} onChange={(kLo) => onChange({ ...template, kLo })} />
           <NumericField label="Call Strike" value={template.kHi} onChange={(kHi) => onChange({ ...template, kHi })} />
-          <NumericField label="Contracts" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
+          <NumericField label="Gross payout $" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
         </>
       );
     case 'range':
@@ -147,7 +141,7 @@ function TemplateFields({
         <>
           <NumericField label="Lower" value={template.K1} onChange={(K1) => onChange({ ...template, K1 })} />
           <NumericField label="Upper" value={template.K2} onChange={(K2) => onChange({ ...template, K2 })} />
-          <NumericField label="Contracts" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
+          <NumericField label="Gross payout $" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
         </>
       );
     case 'peak':
@@ -155,7 +149,7 @@ function TemplateFields({
         <>
           <NumericField label="Center" value={template.center} onChange={(center) => onChange({ ...template, center })} />
           <NumericField label="Width" value={template.width} onChange={(width) => onChange({ ...template, width })} />
-          <NumericField label="Contracts" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
+          <NumericField label="Gross payout $" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
         </>
       );
     case 'ramp':
@@ -182,7 +176,7 @@ function TemplateFields({
       return (
         <>
           <NumericField label="Strike" value={template.K} onChange={(K) => onChange({ ...template, K })} />
-          <NumericField label="Contracts" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
+          <NumericField label="Gross payout $" value={template.qty / USDC} moneyScale={false} onChange={(qty) => onChange({ ...template, qty: qty * USDC })} />
         </>
       );
     default:

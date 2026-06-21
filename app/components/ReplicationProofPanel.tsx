@@ -21,8 +21,8 @@ export function ReplicationProofPanel({
     <section className="panel p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="metric-label">Proof</div>
-          <h2 className="text-base font-semibold">Predict replication</h2>
+          <div className="metric-label">Payoff rules</div>
+          <h2 className="text-base font-semibold">Settlement conditions</h2>
         </div>
         <Boxes size={18} className="blue-text" />
       </div>
@@ -35,16 +35,19 @@ export function ReplicationProofPanel({
         <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
         <span>{proof.assertion}</span>
       </div>
+      <div className="mt-2 text-xs muted-text">These are the exact settlement rules: if the final BTC price satisfies a row, that row pays.</div>
       <div className="mt-3 grid gap-2">
         {proof.rows.map((row, index) => (
-          <div key={`${row.kind}-${row.condition}-${index}`} className="surface grid gap-1 px-3 py-2 text-sm md:grid-cols-[92px_1fr_auto] md:items-center">
+          <div
+            key={`${row.kind}-${row.condition}-${index}`}
+            className="surface grid gap-1 px-3 py-2 text-sm md:grid-cols-[92px_minmax(0,1fr)_auto] md:items-center"
+          >
             <span className="metric-label">{row.kind}</span>
-            <span>{row.condition}</span>
+            <span className="min-w-0 break-words">{row.condition}</span>
             <span className="metric-value">{row.payout}</span>
           </div>
         ))}
       </div>
-      <div className="mt-3 surface break-all px-3 py-2 text-xs metric-label">Digest: {proof.digestLabel}</div>
     </section>
   );
 }

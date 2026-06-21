@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fairFromSvi, priceBasketSequential, type ImpactParams } from './impact';
-import { optimize, optimizeBasket, optimizeSparse } from './optimizer';
-import type { Decomposition, OracleState, SVI } from './types';
+import { optimize, optimizeBasket, optimizeSparse, scaleLegsToTargetGross } from './optimizer';
+import { maxGain } from './payoff';
+import { USDC, type Decomposition, type OracleState, type SVI } from './types';
 
 const oracle = {} as OracleState;
 
@@ -35,6 +36,28 @@ describe('optimize', () => {
 
     expect(res.best.legCount).toBeLessThanOrEqual(8);
     expect(res.all).toHaveLength(3);
+    expect(Number.isFinite(res.savingsVsNaive)).toBe(true);
+    expect(res.savingsVsNaive).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports real (non-negative) savings vs a dense replication for a jagged payoff', () => {
+    const svi: SVI = { a: 0.04, b: 0.1, rho: -0.3, m: 0, sigma: 0.2 };
+    const gridStrikes = Array.from({ length: 16 }, (_, i) => 80 + i * 4);
+    const res = optimizeSparse(
+      { gridStrikes, g: gridStrikes.map((_, i) => (i % 2 === 0 ? 2 : 0)) },
+      svi,
+      120,
+    );
+    // savings is the priced gap between the dense baseline and the chosen <=8-leg solution
+    expect(res.savingsVsNaive).toBeGreaterThanOrEqual(0);
+    expect(res.savingsVsNaive).toBeCloseTo(Math.max(0, res.naivePremiumEst - res.best.premiumEst), 9);
+  });
+
+  it('normalizes sparse legs to the requested gross payout scale', () => {
+    const legs = [{ isRange: true, isUp: false, lowerStrike: 100, higherStrike: 110, quantity: 92_790_000 }];
+    const scaled = scaleLegsToTargetGross(legs, { gridStrikes: [100, 110], g: [0, 100] });
+
+    expect(maxGain(scaled, 0)).toBe(100 * USDC);
   });
 
   it('exposes impact-aware sequential basket optimization', () => {

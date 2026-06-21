@@ -1,4 +1,4 @@
-import { createIntentFromAnthropic } from '@/lib/ai-intent';
+import { createIntentFromPrompt } from '@/lib/ai-intent';
 import type { OracleState } from '@/lib/types';
 
 export async function POST(request: Request) {
@@ -11,10 +11,9 @@ export async function POST(request: Request) {
       return Response.json({ error: 'oracle is required' }, { status: 400 });
     }
 
-    return Response.json(await createIntentFromAnthropic({ prompt: body.prompt, oracle: body.oracle as OracleState }));
+    return Response.json(await createIntentFromPrompt({ prompt: body.prompt, oracle: body.oracle as OracleState }));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'intent generation failed';
-    const status = message.includes('ANTHROPIC_API_KEY') ? 503 : message.includes('Anthropic intent request failed') ? 502 : 422;
-    return Response.json({ error: message }, { status });
+    return Response.json({ error: message }, { status: 422 });
   }
 }

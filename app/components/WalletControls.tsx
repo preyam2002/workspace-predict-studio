@@ -12,7 +12,7 @@ export function WalletControls() {
 
   return (
     <div className="flex items-center gap-2">
-      <WalletCards size={18} className="blue-text" />
+      <WalletCards size={18} className="volt-text" />
       {!account && googleWallet ? (
         <button className="icon-button" disabled={isPending} type="button" onClick={() => mutate({ wallet: googleWallet })}>
           Google

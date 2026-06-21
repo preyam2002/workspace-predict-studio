@@ -35,9 +35,11 @@ export interface CetusSdkLike {
       published_at?: string;
     };
   };
+  setSenderAddress?: (address: string) => void;
   Pool: {
     getPoolsWithPage?: (args?: { limit?: number }) => Promise<{ data?: Array<{ id?: string }>; hasNextPage?: boolean }>;
     getPool?: (poolId: string) => Promise<CetusPoolLike>;
+    getPoolByCoins?: (coins: string[], feeRate?: number) => Promise<Array<{ id?: string; pool_address?: string }>>;
     calculateCreatePoolWithPrice?: (params: any) => Promise<unknown>;
     createPoolWithPricePayload?: (params: any) => Promise<unknown>;
   };
@@ -52,7 +54,7 @@ export interface CetusDeploymentStatus {
 }
 
 export interface CetusSecondaryPrice {
-  source: 'cetus' | 'mock';
+  source: 'cetus';
   poolId: string;
   price: number;
   rawPrice: number;
@@ -60,7 +62,11 @@ export interface CetusSecondaryPrice {
   coinTypeA?: string;
   coinTypeB?: string;
   feeRate?: number;
-  reason?: string;
+}
+
+export interface CetusSecondaryUnavailable {
+  source: 'unconfigured';
+  reason: string;
 }
 
 export interface ReadCetusSecondaryPriceParams {
@@ -107,34 +113,33 @@ export function studioLpCoinType(packageId: string): string {
   return `${packageId}::studio_lp::STUDIO_LP`;
 }
 
+// Empty-string env values count as unset; .env files ship blank placeholders.
+function configuredText(value: string | undefined): string | undefined {
+  return value ? value : undefined;
+}
+
 export function cetusMarketConfigFromEnv(env: CetusMarketEnv): CetusMarketConfig | undefined {
   const appConfig = getAppNetworkConfig(env);
-  const poolId = env.NEXT_PUBLIC_CETUS_STUDIO_POOL_ID ?? appConfig.cetusStudioPoolId;
+  const poolId = configuredText(env.NEXT_PUBLIC_CETUS_STUDIO_POOL_ID) ?? appConfig.cetusStudioPoolId;
   const baseCoinType =
-    env.NEXT_PUBLIC_CETUS_BASE_COIN_TYPE ??
+    configuredText(env.NEXT_PUBLIC_CETUS_BASE_COIN_TYPE) ??
     (appConfig.predictStudioPackage !== '0x0' ? studioLpCoinType(appConfig.predictStudioPackage) : undefined);
-  const quoteCoinType = env.NEXT_PUBLIC_CETUS_QUOTE_COIN_TYPE ?? appConfig.dusdcType;
+  const quoteCoinType = configuredText(env.NEXT_PUBLIC_CETUS_QUOTE_COIN_TYPE) ?? appConfig.dusdcType;
   if (!poolId || !baseCoinType || !quoteCoinType) return undefined;
   return {
     poolId,
     baseCoinType,
     quoteCoinType,
-    baseDecimals: Number(env.NEXT_PUBLIC_CETUS_BASE_DECIMALS ?? 6),
-    quoteDecimals: Number(env.NEXT_PUBLIC_CETUS_QUOTE_DECIMALS ?? 6),
+    baseDecimals: Number(configuredText(env.NEXT_PUBLIC_CETUS_BASE_DECIMALS) ?? 6),
+    quoteDecimals: Number(configuredText(env.NEXT_PUBLIC_CETUS_QUOTE_DECIMALS) ?? 6),
     env: appConfig.network,
   };
 }
 
-export function mockCetusSecondaryPrice(reason = 'missing STUDIO_LP/dUSDC Cetus pool config'): CetusSecondaryPrice {
-  const quote = quoteConstantProductExit(1_000, { reserveIn: 100_000, reserveOut: 99_000, feeBps: 30 });
-  return {
-    source: 'mock',
-    poolId: 'mock',
-    price: quote.price,
-    rawPrice: quote.price,
-    inverted: false,
-    reason,
-  };
+export function unconfiguredCetusSecondaryMarket(
+  reason = 'missing STUDIO_LP/dUSDC Cetus pool config',
+): CetusSecondaryUnavailable {
+  return { source: 'unconfigured', reason };
 }
 
 export async function createCetusSdk(env: CetusEnv = 'testnet', fullRpcUrl?: string): Promise<CetusSdkLike> {

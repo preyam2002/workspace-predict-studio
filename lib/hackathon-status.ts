@@ -1,3 +1,7 @@
+import type { Env } from './script-env';
+
+export { parseEnvContent } from './script-env';
+
 export type HackathonGateStatus = 'pass' | 'blocked' | 'fail';
 
 export interface HackathonGate {
@@ -12,8 +16,6 @@ export interface HackathonSummary {
   fail: number;
   ready: boolean;
 }
-
-type Env = Record<string, string | undefined>;
 
 function missing(env: Env, keys: string[]): string[] {
   return keys.filter((key) => !env[key]);
@@ -48,6 +50,9 @@ export function classifyConfigGates(env: Env, shellGates: HackathonGate[] = []):
           status: 'blocked',
           detail: 'missing NEXT_PUBLIC_CETUS_STUDIO_POOL_ID or funded DeepBook Spot pool',
         },
+    env.ANTHROPIC_API_KEY
+      ? { name: 'ai-intent:config', status: 'pass', detail: 'Anthropic intent API key is configured' }
+      : { name: 'ai-intent:config', status: 'blocked', detail: 'missing ANTHROPIC_API_KEY' },
     env.DEMO_VIDEO_URL
       ? { name: 'demo:video', status: 'pass', detail: 'demo video URL is recorded' }
       : { name: 'demo:video', status: 'blocked', detail: 'missing DEMO_VIDEO_URL' },
@@ -107,6 +112,39 @@ export function classifyGateOutput(name: string, output: string): HackathonGate 
       return { name, status: 'pass', detail: 'vault settlement digest recorded or executable' };
     }
     if (output.includes('vault_no_open_strategy')) return { name, status: 'pass', detail: 'vault has no open strategy to settle' };
+  }
+  if (name === 'collateral:demo') {
+    if (output.includes('k2_onchain_verified=success')) {
+      return { name, status: 'pass', detail: 'K2 note-backed lending loop re-verified on-chain (status=success)' };
+    }
+    if (output.includes('k2_onchain_verified=failed')) {
+      return { name, status: 'fail', detail: 'recorded K2 digests did not resolve to success on-chain' };
+    }
+    if (output.includes('no k2_note_lending block')) {
+      return { name, status: 'blocked', detail: 'missing recorded K2 note-backed lending proof in deploy.json' };
+    }
+  }
+  if (name === 'rfq:demo') {
+    if (output.includes('rfq_onchain_verified=success')) {
+      return { name, status: 'pass', detail: 'RFQ signed-quote fill re-verified on-chain (status=success)' };
+    }
+    if (output.includes('rfq_onchain_verified=failed')) {
+      return { name, status: 'fail', detail: 'recorded RFQ fill digest did not resolve to success on-chain' };
+    }
+    if (output.includes('no rfq_demo block')) {
+      return { name, status: 'blocked', detail: 'missing recorded RFQ fill proof in deploy.json' };
+    }
+  }
+  if (name === 'kiosk:demo') {
+    if (output.includes('kiosk_onchain_verified=success')) {
+      return { name, status: 'pass', detail: 'Kiosk royalty resale re-verified on-chain (status=success)' };
+    }
+    if (output.includes('kiosk_onchain_verified=failed')) {
+      return { name, status: 'fail', detail: 'recorded kiosk digests did not resolve to success on-chain' };
+    }
+    if (output.includes('no kiosk_demo block')) {
+      return { name, status: 'blocked', detail: 'missing recorded kiosk royalty proof in deploy.json' };
+    }
   }
   return { name, status: 'fail', detail: 'unexpected output' };
 }

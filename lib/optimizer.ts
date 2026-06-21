@@ -1,6 +1,7 @@
 import { priceSolution, solveCertifiedSparse } from './solver';
 import { defaultImpactParams, fairFromSvi, optimalOrder, priceBasketSequential, splitAcrossCandidates, type AmmState, type ImpactParams } from './impact';
-import { MAX_LEGS_PER_PTB, type Decomposition, type Leg, type OracleState, type PricedDecomp, type SparseTarget, type SVI } from './types';
+import { maxGain } from './payoff';
+import { MAX_LEGS_PER_PTB, USDC, type Decomposition, type Leg, type OracleState, type PricedDecomp, type SparseTarget, type SVI } from './types';
 
 export type QuoteLeg = (leg: Leg) => Promise<number>;
 
@@ -62,7 +63,25 @@ export function optimizeSparse(target: SparseTarget, svi: SVI, forward: number) 
     priceSolution(solveCertifiedSparse(target, { maxLegs, tol: 0.005, maxSupports: 10_000 }).solution, svi, forward),
   );
   candidates.sort((a, b) => a.premiumEst - b.premiumEst || a.legCount - b.legCount);
-  return { best: candidates[0], all: candidates };
+  const best = candidates[0];
+  // Naive baseline: replicate the same target densely (one leg per grid step, near-exact),
+  // then measure what the gas-bounded sparse solve actually saves against it.
+  const denseLegBudget = Math.min(Math.max(target.gridStrikes.length, 8), 32);
+  const naive = priceSolution(
+    solveCertifiedSparse(target, { maxLegs: denseLegBudget, tol: 0.0005, maxSupports: 10_000 }).solution,
+    svi,
+    forward,
+  );
+  const savingsVsNaive = Math.max(0, naive.premiumEst - best.premiumEst);
+  return { best, all: candidates, naivePremiumEst: naive.premiumEst, savingsVsNaive };
+}
+
+export function scaleLegsToTargetGross(legs: Leg[], target: SparseTarget): Leg[] {
+  const targetGross = Math.round(Math.max(0, ...target.g) * USDC);
+  const actualGross = maxGain(legs, 0);
+  if (targetGross <= 0 || actualGross <= 0) return legs;
+  const scale = targetGross / actualGross;
+  return legs.map((leg) => ({ ...leg, quantity: Math.max(0, Math.round(leg.quantity * scale)) }));
 }
 
 export function optimizeBasket(

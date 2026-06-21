@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   breakevens,
   basketGreeks,
@@ -31,7 +32,7 @@ describe('payoff analytics', () => {
     expect(maxLoss(400_000)).toBe(400_000);
     expect(maxGain(legs, 400_000)).toBe(600_000);
     expect(breakevens(legs, 400_000).length).toBeGreaterThan(0);
-    expect(payoffCurve(legs, 400_000, 65_000, 75_000, 10)).toHaveLength(11);
+    expect(payoffCurve(legs, 400_000, 65_000, 75_000, 10).length).toBeGreaterThanOrEqual(11);
   });
 
   it('keeps SVI probabilities and greeks finite', () => {
@@ -67,5 +68,41 @@ describe('payoff analytics', () => {
     priceRange(svi, 70_000, 68_000, 72_000);
     priceUp({ ...svi }, 71_000, 70_000);
     expect(pricingCacheSizes().guard).toBe(1);
+  });
+
+  it('renders PayoffChart without Recharts stateful chart primitives', () => {
+    const source = readFileSync('app/components/PayoffChart.tsx', 'utf8');
+
+    expect(source).not.toContain("from 'recharts'");
+    expect(source).toContain('<svg');
+    expect(source).toContain('curvePath');
+  });
+
+  it('keeps PayoffChart axis text from stretching with the plot', () => {
+    const source = readFileSync('app/components/PayoffChart.tsx', 'utf8');
+
+    expect(source).not.toContain('<text');
+    expect(source).toContain('absolute inset-0 h-full w-full');
+    expect(source).toContain('absolute bottom-0');
+  });
+
+  it('does not force a ten-dollar y-axis pad onto small payoff charts', () => {
+    const source = readFileSync('app/components/PayoffChart.tsx', 'utf8');
+
+    expect(source).not.toContain('Math.max(10');
+    expect(source).toContain('minimumFractionDigits');
+  });
+
+  it('samples narrow range legs at their breakpoints so the chart shows real max gain', () => {
+    const narrow: Leg[] = [
+      { isRange: true, isUp: false, lowerStrike: 64_239, higherStrike: 64_243, quantity: 50_000_000 },
+      { isRange: true, isUp: false, lowerStrike: 64_241, higherStrike: 64_242, quantity: 42_790_000 },
+      { isRange: true, isUp: false, lowerStrike: 64_243, higherStrike: 64_244, quantity: 26_120_000 },
+      { isRange: true, isUp: false, lowerStrike: 64_240, higherStrike: 64_241, quantity: 23_880_000 },
+    ];
+    const premium = 1_020_000;
+    const curve = payoffCurve(narrow, premium, 57_819, 70_667, 200);
+
+    expect(Math.max(...curve.map((point) => point.pnl))).toBe(maxGain(narrow, premium));
   });
 });

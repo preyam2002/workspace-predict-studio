@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPublisherLeaderboard, publisherLeaderboardFromEvents, settledHistoryFromOracles } from './indexer';
+import { activeOracleChoices, getPublisherLeaderboard, publisherLeaderboardFromEvents, settledHistoryFromOracles } from './indexer';
 
 describe('publisher leaderboard indexing', () => {
   it('aggregates publisher fee events by implied premium volume', () => {
@@ -69,5 +69,54 @@ describe('settled history indexing', () => {
       { settlementPrice: 3, expiryMs: 30 },
       { settlementPrice: 0, expiryMs: 10 },
     ]);
+  });
+});
+
+describe('active oracle choices', () => {
+  it('returns live BTC expiries sorted from soonest to latest', () => {
+    expect(
+      activeOracleChoices(
+        [
+          {
+            predict_id: '0x1',
+            oracle_id: '0xlate',
+            underlying_asset: 'BTC',
+            expiry: 5_000,
+            min_strike: 0,
+            tick_size: 1,
+            status: 'active',
+          },
+          {
+            predict_id: '0x1',
+            oracle_id: '0xexpired',
+            underlying_asset: 'BTC',
+            expiry: 1_000,
+            min_strike: 0,
+            tick_size: 1,
+            status: 'active',
+          },
+          {
+            predict_id: '0x1',
+            oracle_id: '0xeth',
+            underlying_asset: 'ETH',
+            expiry: 3_000,
+            min_strike: 0,
+            tick_size: 1,
+            status: 'active',
+          },
+          {
+            predict_id: '0x1',
+            oracle_id: '0xsoon',
+            underlying_asset: 'BTC',
+            expiry: 3_000,
+            min_strike: 0,
+            tick_size: 1,
+            status: 'active',
+          },
+        ],
+        'BTC',
+        2_000,
+      ).map((oracle) => oracle.oracle_id),
+    ).toEqual(['0xsoon', '0xlate']);
   });
 });

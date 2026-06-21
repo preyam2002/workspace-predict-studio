@@ -9,7 +9,10 @@ function money(value: number) {
 }
 
 function metric(value: number, digits = 4) {
-  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+  // Round first, then strip negative zero so tiny greeks read "0" not "-0".
+  const rounded = Number(value.toFixed(digits));
+  const safe = Object.is(rounded, -0) ? 0 : rounded;
+  return safe.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
 export function NoteAnalyticsPanel({ legs, premium, oracle }: { legs: Leg[]; premium: number; oracle: OracleState }) {
@@ -21,17 +24,17 @@ export function NoteAnalyticsPanel({ legs, premium, oracle }: { legs: Leg[]; pre
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="metric-label">Risk</div>
-          <h2 className="text-base font-semibold">Note Greeks</h2>
+          <h2 className="text-base font-semibold">Risk estimate</h2>
         </div>
         <Activity size={18} className="blue-text" />
       </div>
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <Metric label="Mark" value={money(greeks.mark)} />
-        <Metric label="Delta" value={metric(greeks.delta / USDC, 6)} />
-        <Metric label="Gamma" value={metric(greeks.gamma / USDC, 8)} />
-        <Metric label="Vega" value={money(greeks.vega)} />
-        <Metric label="Theta/day" value={money(greeks.theta)} />
-        <Metric label="Expiry" value={`${Math.max(0, analytics.tauYears * 365).toFixed(1)}d`} />
+        <Metric label="Mark" value={money(greeks.mark)} title="Estimated value right now." />
+        <Metric label="Delta" value={metric(greeks.delta / USDC, 6)} title="Estimated change if BTC moves a little." />
+        <Metric label="Gamma" value={metric(greeks.gamma / USDC, 8)} title="Estimated change in delta." />
+        <Metric label="Vega" value={money(greeks.vega)} title="Estimated change if volatility moves." />
+        <Metric label="Theta/day" value={money(greeks.theta)} title="Estimated value lost or gained per day." />
+        <Metric label="Expiry" value={`${Math.max(0, analytics.tauYears * 365).toFixed(1)}d`} title="Time left until settlement." />
       </div>
       <div className="mt-3 flex items-center gap-2 text-xs metric-label">
         <LineChart size={14} />
@@ -45,11 +48,11 @@ export function NoteAnalyticsPanel({ legs, premium, oracle }: { legs: Leg[]; pre
   );
 }
 
-function Metric({ label, value, tone = '' }: { label: string; value: string; tone?: string }) {
+function Metric({ label, value, tone = '', title }: { label: string; value: string; tone?: string; title?: string }) {
   return (
-    <div className="surface px-3 py-2">
+    <div className="surface min-w-0 px-3 py-2" title={title}>
       <div className="metric-label">{label}</div>
-      <div className={`metric-value ${tone}`}>{value}</div>
+      <div className={`metric-value truncate ${tone}`}>{value}</div>
     </div>
   );
 }

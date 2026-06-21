@@ -24,21 +24,21 @@ export function SolverInspector({ oracle, target }: { oracle: OracleState; targe
         </div>
       </div>
       <div className="mt-4 grid gap-2">
-        {result.all.map((candidate) => (
+        {result.all.map((candidate, index) => (
           <div
-            key={`${candidate.legCount}-${candidate.l2Error}-${candidate.premiumEst}`}
+            key={`cand-${index}-${candidate.legCount}`}
             className="surface grid grid-cols-4 items-center gap-2 px-3 py-2 text-sm"
           >
             <span className="metric-value">{candidate.legCount} legs</span>
             <span>{usd(candidate.premiumEst)}</span>
             <span>err {candidate.maxAbsError.toFixed(3)}</span>
-            <span className={candidate === result.best ? 'good-text' : 'text-[#8c96a8]'}>
+            <span className={candidate === result.best ? 'good-text' : 'muted-text'}>
               {candidate === result.best ? 'best' : `${Math.round(candidate.premiumEst * USDC).toLocaleString()} q`}
             </span>
           </div>
         ))}
       </div>
-      <div className="mt-3 flex items-center gap-2 text-xs text-[#8c96a8]">
+      <div className="mt-3 flex items-center gap-2 text-xs muted-text">
         <Activity size={14} />
         {target.gridStrikes.length} sampled cells
       </div>

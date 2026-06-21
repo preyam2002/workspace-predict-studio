@@ -5,6 +5,7 @@ module predict_studio::note_kiosk_tests {
     use sui::{
         coin,
         kiosk,
+        package,
         sui::SUI,
         transfer_policy,
         tx_context,
@@ -63,6 +64,41 @@ module predict_studio::note_kiosk_tests {
         coin::burn_for_testing(proceeds);
         let empty_policy = transfer_policy::destroy_and_withdraw(policy, policy_cap, &mut ctx);
         coin::burn_for_testing(empty_policy);
+    }
+
+    #[test]
+    fun real_publisher_policy_supports_royalty_resale() {
+        let mut ctx = tx_context::dummy();
+        // The package's own Publisher (claimed at publish via init) is what makes a usable,
+        // non-test TransferPolicy possible. Prove that path end-to-end.
+        let publisher = package::test_claim(note_kiosk::otw_for_testing(), &mut ctx);
+        let (mut seller_kiosk, seller_cap) = kiosk::new(&mut ctx);
+        let (mut policy, policy_cap) = note_kiosk::new_policy(&publisher, &mut ctx);
+        note_kiosk::set_royalty(&mut policy, &policy_cap, 250, @0xB);
+
+        let note = note_kiosk::new_note(x"0a0b", @0xB, 1_000_000, 123_456, 250, &mut ctx);
+        let note_id = note_kiosk::id(&note);
+        note_kiosk::lock_note(&mut seller_kiosk, &seller_cap, &policy, note);
+        kiosk::list<note_kiosk::StudioNote>(&mut seller_kiosk, &seller_cap, note_id, 100_000);
+
+        let payment = coin::mint_for_testing<SUI>(100_000, &mut ctx);
+        let (purchased, mut request) = kiosk::purchase<note_kiosk::StudioNote>(&mut seller_kiosk, note_id, payment);
+        let mut royalty_payment = coin::mint_for_testing<SUI>(2_500, &mut ctx);
+        note_kiosk::pay_royalty(&mut policy, &mut request, &mut royalty_payment, &mut ctx);
+        let (_, paid, _) = transfer_policy::confirm_request(&policy, request);
+        assert!(paid == 100_000, 0);
+        assert!(coin::value(&royalty_payment) == 0, 1);
+
+        note_kiosk::destroy_note_for_testing(purchased);
+        coin::burn_for_testing(royalty_payment);
+        let royalty = transfer_policy::withdraw(&mut policy, &policy_cap, option::none(), &mut ctx);
+        assert!(coin::value(&royalty) == 2_500, 2);
+        coin::burn_for_testing(royalty);
+        let seller_proceeds = kiosk::close_and_withdraw(seller_kiosk, seller_cap, &mut ctx);
+        coin::burn_for_testing(seller_proceeds);
+        let empty_policy = transfer_policy::destroy_and_withdraw(policy, policy_cap, &mut ctx);
+        coin::burn_for_testing(empty_policy);
+        package::burn_publisher(publisher);
     }
 
     #[test, expected_failure(abort_code = 1)]

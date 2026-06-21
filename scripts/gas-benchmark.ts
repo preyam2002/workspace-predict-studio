@@ -1,6 +1,9 @@
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
 import { existsSync, readFileSync } from 'node:fs';
+import { applyScriptEnv } from '../lib/script-env';
+
+applyScriptEnv();
 
 if (!existsSync('./scripts/config.json')) {
   throw new Error('Missing scripts/config.json. Run `pnpm verify:first -- --write-config`, then fill managerId, dusdcType, dusdcCoinId, and sender.');

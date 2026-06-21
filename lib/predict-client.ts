@@ -8,6 +8,7 @@ import { FLOAT, type Leg, type OracleState, type SVI } from './types';
 type MoveObjectFields = Record<string, unknown>;
 type MoveObjectLike = { objectId?: string; content?: { dataType?: string; fields?: MoveObjectFields } };
 type SettleOracleConfig = Pick<OracleState, 'predictId' | 'managerId' | 'oracleId' | 'dusdcType'>;
+type TransactionEventsLike = { events?: Array<{ type?: string; parsedJson?: unknown }> | null };
 
 export interface StructuredPositionSummary {
   objectId: string;
@@ -98,6 +99,12 @@ export function structuredPositionFromObject(data: MoveObjectLike): StructuredPo
   };
 }
 
+export function managerIdFromTransaction(transaction: TransactionEventsLike): string | undefined {
+  const event = transaction.events?.find((item) => item.type?.endsWith('::predict_manager::PredictManagerCreated'));
+  const managerId = (event?.parsedJson as { manager_id?: unknown } | undefined)?.manager_id;
+  return typeof managerId === 'string' ? managerId : undefined;
+}
+
 function i64Float(value: unknown): number {
   const fields = (value as { fields?: { is_negative?: boolean; magnitude?: string } }).fields;
   if (!fields) throw new Error('Expected I64 field');
@@ -125,6 +132,31 @@ function objectPackage(type: string): string {
   return type.split('::')[0];
 }
 
+export function isLiveOracleState(oracle: Pick<OracleState, 'status' | 'expiryMs'>, nowMs = Date.now()): boolean {
+  return oracle.status === 'active' && oracle.expiryMs > nowMs;
+}
+
+function isLiveIndexerOracle(oracle: IndexerOracle, nowMs: number): boolean {
+  return oracle.status === 'active' && Number(oracle.expiry) > nowMs;
+}
+
+export function selectLiveIndexerOracle(oracles: IndexerOracle[], preferredOracleId?: string, nowMs = Date.now()): IndexerOracle | undefined {
+  const preferred = preferredOracleId ? oracles.find((oracle) => oracle.oracle_id === preferredOracleId) : undefined;
+  if (preferred && isLiveIndexerOracle(preferred, nowMs)) return preferred;
+  return oracles.find((oracle) => isLiveIndexerOracle(oracle, nowMs)) ?? preferred ?? oracles[0];
+}
+
+export async function getManagerOwner(client: SuiJsonRpcClient, managerId: string): Promise<string | undefined> {
+  const object = await client.getObject({
+    id: managerId,
+    options: { showContent: true },
+  });
+  const content = object.data?.content;
+  if (!content || content.dataType !== 'moveObject') return undefined;
+  const owner = (content.fields as MoveObjectFields | undefined)?.owner;
+  return typeof owner === 'string' ? owner : undefined;
+}
+
 export async function loadOracleState(
   client: SuiJsonRpcClient,
   options: {
@@ -134,10 +166,7 @@ export async function loadOracleState(
   } = {},
 ): Promise<OracleState> {
   const oracles = await getOracles();
-  const indexerOracle =
-    (options.oracleId && oracles.find((oracle) => oracle.oracle_id === options.oracleId)) ??
-    oracles.find((oracle) => oracle.status === 'active') ??
-    oracles[0];
+  const indexerOracle = selectLiveIndexerOracle(oracles, options.oracleId);
 
   if (!indexerOracle) throw new Error('No Predict oracles returned from indexer');
 
@@ -157,7 +186,7 @@ export async function loadOracleState(
     oracleId: indexerOracle.oracle_id,
     dbpPackage: objectPackage(object.data.type ?? ''),
     dusdcType: options.dusdcType ?? process.env.NEXT_PUBLIC_DUSDC_TYPE ?? '',
-    managerId: options.managerId ?? process.env.NEXT_PUBLIC_MANAGER_ID,
+    managerId: options.managerId,
     expiryMs: numeric(fields.expiry ?? indexerOracle.expiry),
     nowMs: Date.now(),
     spot: numeric(prices.spot),
@@ -168,6 +197,11 @@ export async function loadOracleState(
     svi: parseSvi(fields.svi),
     minStrike: Number(indexerOracle.min_strike),
     tickSize: Number(indexerOracle.tick_size),
+    // The DeepBook Predict oracle exposes min_strike + tick_size but no hard max_strike
+    // (confirmed live: the on-chain OracleSVI has no max_strike field). When neither the
+    // object nor the indexer reports one, derive a sane upper grid cap for strike snapping
+    // from real oracle data (min_strike + 100k ticks, or 1.5x spot) — a UI bound only, never
+    // surfaced as a price or NAV.
     maxStrike:
       exposedMaxStrike ??
       Math.max(Number(indexerOracle.min_strike) + Number(indexerOracle.tick_size) * 100_000, numeric(prices.spot) * 1.5),
@@ -248,6 +282,55 @@ export class PredictClient {
     return (await this.quoteLegPair(oracle, leg, sender)).ask;
   }
 
+  async getManagerBalance(oracle: Pick<OracleState, 'managerId' | 'dusdcType'>, sender: string): Promise<number> {
+    if (!oracle.managerId) throw new Error('Missing PredictManager id');
+    if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${this.dbp}::predict_manager::balance`,
+      typeArguments: [oracle.dusdcType],
+      arguments: [tx.object(oracle.managerId)],
+    });
+
+    const result = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
+    const balanceBytes = result.results?.at(-1)?.returnValues?.[0]?.[0];
+    if (!balanceBytes) throw new Error('getManagerBalance: missing devInspect return value');
+    return decodeU64LE(balanceBytes);
+  }
+
+  buildCreateManagerTx(): Transaction {
+    const tx = new Transaction();
+    tx.moveCall({ target: `${this.dbp}::predict::create_manager`, arguments: [] });
+    return tx;
+  }
+
+  buildDepositManagerTx(oracle: Pick<OracleState, 'managerId' | 'dusdcType'>, coinId: string, amount?: number): Transaction {
+    if (!oracle.managerId) throw new Error('Missing PredictManager id');
+    if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
+    const tx = new Transaction();
+    const coin = amount === undefined ? tx.object(coinId) : tx.splitCoins(tx.object(coinId), [tx.pure.u64(BigInt(amount))]);
+    tx.moveCall({
+      target: `${this.dbp}::predict_manager::deposit`,
+      typeArguments: [oracle.dusdcType],
+      arguments: [tx.object(oracle.managerId), coin],
+    });
+    return tx;
+  }
+
+  buildWithdrawManagerTx(oracle: Pick<OracleState, 'managerId' | 'dusdcType'>, amount: number, recipient: string): Transaction {
+    if (!oracle.managerId) throw new Error('Missing PredictManager id');
+    if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
+    if (amount <= 0) throw new Error('Withdraw amount must be positive');
+    const tx = new Transaction();
+    const coin = tx.moveCall({
+      target: `${this.dbp}::predict_manager::withdraw`,
+      typeArguments: [oracle.dusdcType],
+      arguments: [tx.object(oracle.managerId), tx.pure.u64(BigInt(amount))],
+    });
+    tx.transferObjects([coin], recipient);
+    return tx;
+  }
+
   buildMintTx(oracle: OracleState, legs: Leg[], shape: string, maxLossBudget: number): Transaction {
     if (!oracle.managerId) throw new Error('Missing PredictManager id');
     if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
@@ -278,6 +361,7 @@ export class PredictClient {
     quote: RfqQuote,
     publicKey: Uint8Array | number[],
     signature: Uint8Array | number[],
+    recipient: string,
   ): Transaction {
     if (!oracle.managerId) throw new Error('Missing PredictManager id');
     if (!oracle.dusdcType) throw new Error('Missing dUSDC type');
@@ -294,7 +378,9 @@ export class PredictClient {
       ],
     });
 
-    tx.moveCall({
+    // fill_quote returns the minted StructuredPosition by value; it has `key, store` but
+    // no `drop`, so the PTB must transfer it or the transaction is rejected.
+    const position = tx.moveCall({
       target: `${this.pkg}::rfq::fill_quote`,
       typeArguments: [oracle.dusdcType],
       arguments: [
@@ -310,6 +396,7 @@ export class PredictClient {
         tx.object('0x6'),
       ],
     });
+    tx.transferObjects([position], recipient);
     return tx;
   }
 

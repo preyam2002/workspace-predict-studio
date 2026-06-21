@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backtest, backtestWithFallback, syntheticSettlements } from './backtest';
+import { backtest, backtestWithModelSimulation, syntheticSettlements } from './backtest';
 
 describe('backtest', () => {
   it('replays a structure against settlements', () => {
@@ -23,7 +23,7 @@ describe('backtest', () => {
     const second = syntheticSettlements(100, 0.8, 1 / 365, 4, 123).map((item) => item.settlementPrice);
     expect(first).toEqual(second);
 
-    const result = backtestWithFallback(
+    const result = backtestWithModelSimulation(
       [{ isRange: false, isUp: true, lowerStrike: 100, higherStrike: 0, quantity: 1_000_000 }],
       400_000,
       [],

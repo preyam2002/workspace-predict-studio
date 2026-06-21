@@ -1,8 +1,8 @@
-import { cetusMarketConfigFromEnv, createCetusSdk, mockCetusSecondaryPrice, readCetusSecondaryPrice } from '@/lib/cetus';
+import { cetusMarketConfigFromEnv, createCetusSdk, readCetusSecondaryPrice, unconfiguredCetusSecondaryMarket } from '@/lib/cetus';
 
 export async function GET() {
   const config = cetusMarketConfigFromEnv(process.env);
-  if (!config) return Response.json(mockCetusSecondaryPrice());
+  if (!config) return Response.json(unconfiguredCetusSecondaryMarket(), { status: 503 });
 
   try {
     const sdk = await createCetusSdk(config.env);

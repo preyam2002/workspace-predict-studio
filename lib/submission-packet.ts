@@ -26,6 +26,9 @@ export const REQUIRED_LIVE_PROOF_LABELS = [
   'vault roll:',
   'vault position:',
   'vault settle:',
+  'k2 package:',
+  'k2 mint+borrow:',
+  'k2 repay+reclaim:',
 ] as const;
 
 export const REQUIRED_SUBMISSION_COMMANDS = [
@@ -34,6 +37,7 @@ export const REQUIRED_SUBMISSION_COMMANDS = [
   'pnpm deepbook:spot-check -- --all-addresses --dry-run',
   'pnpm settle:sample',
   'pnpm settle:vault',
+  'pnpm collateral:demo',
   'pnpm live:proof',
   'pnpm hackathon:status',
   'pnpm submission:check',
@@ -45,7 +49,7 @@ export const REQUIRED_SUBMISSION_COMMANDS = [
 
 export const REQUIRED_DISCLOSURES = [
   'Enoki gasless lane is implemented',
-  'Secondary market is implemented with Cetus/mock fallback',
+  'Secondary market requires a configured Cetus pool or funded DeepBook Spot path',
   'Predict is testnet-only today',
   'DEMO_VIDEO_URL',
   'DEEPSURGE_SUBMISSION_URL',

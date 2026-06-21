@@ -12,7 +12,6 @@ export interface ReplicationProof {
   onePtb: boolean;
   maxLossEqualsPremium: boolean;
   assertion: string;
-  digestLabel: string;
   rows: ProofLegRow[];
 }
 
@@ -21,21 +20,22 @@ function usd(value: number): string {
 }
 
 function strike(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const scaled = Math.abs(value) > 1_000_000 ? value / 1_000_000_000 : value;
+  return `$${scaled.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(scaled) ? 0 : 2 })}`;
 }
 
 export function formatLegForProof(leg: Leg): ProofLegRow {
   if (leg.isRange) {
     return {
       kind: 'Range',
-      condition: `${strike(leg.lowerStrike)} < settle <= ${strike(leg.higherStrike)}`,
+      condition: `Settlement above ${strike(leg.lowerStrike)} and at or below ${strike(leg.higherStrike)}`,
       payout: usd(leg.quantity),
     };
   }
 
   return {
     kind: leg.isUp ? 'Binary call' : 'Binary put',
-    condition: leg.isUp ? `settle > ${strike(leg.lowerStrike)}` : `settle < ${strike(leg.lowerStrike)}`,
+    condition: leg.isUp ? `Settlement above ${strike(leg.lowerStrike)}` : `Settlement below ${strike(leg.lowerStrike)}`,
     payout: usd(leg.quantity),
   };
 }
@@ -45,16 +45,15 @@ function replicatedPayoff(legs: Leg[], settlement: number): number {
 }
 
 function assertionFor(legs: Leg[], target?: SparseTarget): string {
-  if (!target) return 'payoff proof ready for live settlement digest';
+  if (!target) return 'Rules are generated from the current Predict legs.';
   const ok = target.gridStrikes.every((settlement, i) => Math.abs(replicatedPayoff(legs, settlement) - target.g[i]) <= 0.01);
-  return ok ? 'payoff == settlement on sampled grid' : 'replication mismatch on sampled grid';
+  return ok ? 'Payoff matches the sampled settlement grid.' : 'Payoff does not match the sampled settlement grid.';
 }
 
 export function buildReplicationProof({
   legs,
   premium,
   target,
-  liveDigest,
 }: {
   legs: Leg[];
   premium: number;
@@ -66,7 +65,6 @@ export function buildReplicationProof({
     onePtb: legs.length > 0 && legs.length <= 8,
     maxLossEqualsPremium: premium >= 0,
     assertion: assertionFor(legs, target),
-    digestLabel: liveDigest ?? 'pending live digest',
     rows: legs.map(formatLegForProof),
   };
 }

@@ -8,6 +8,8 @@ describe('buy-lane PWA manifest', () => {
     expect(manifest.name).toBe('Predict Studio Buy');
     expect(manifest.start_url).toBe('/buy');
     expect(manifest.display).toBe('standalone');
-    expect(manifest.icons.length).toBeGreaterThan(0);
+    const icons = manifest.icons;
+    expect(icons).toBeDefined();
+    expect(icons?.length).toBeGreaterThan(0);
   });
 });

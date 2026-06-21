@@ -1,8 +1,62 @@
+import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
 import type { Leg } from './types';
 
+type MoveObjectLike = { objectId?: string; content?: { dataType?: string; fields?: Record<string, unknown> } };
+
 export interface CollateralMarketIds {
   marketId: string;
+  recipient: string;
+}
+
+export interface NoteBorrowSummary {
+  objectId: string;
+  marketId?: string;
+  owner?: string;
+  floorValue: number;
+  debt: number;
+}
+
+export function noteBorrowFromObject(data: MoveObjectLike): NoteBorrowSummary | undefined {
+  if (!data.objectId || data.content?.dataType !== 'moveObject' || !data.content.fields) return undefined;
+  const fields = data.content.fields;
+  const floorValue = Number(fields.floor_value);
+  const debt = Number(fields.debt);
+  if (!Number.isFinite(floorValue) || !Number.isFinite(debt)) return undefined;
+  return {
+    objectId: data.objectId,
+    marketId: typeof fields.market_id === 'string' ? fields.market_id : undefined,
+    owner: typeof fields.owner === 'string' ? fields.owner : undefined,
+    floorValue,
+    debt,
+  };
+}
+
+export async function listNoteBorrows(
+  client: Pick<SuiJsonRpcClient, 'getOwnedObjects'>,
+  owner: string,
+  pkg: string,
+  dusdcType: string,
+): Promise<NoteBorrowSummary[]> {
+  const res = await client.getOwnedObjects({
+    owner,
+    filter: { StructType: `${pkg}::studio_collateral::NoteBorrow<${dusdcType}>` },
+    options: { showContent: true },
+  });
+  return res.data.flatMap((item) => {
+    const loan = noteBorrowFromObject(item.data as MoveObjectLike);
+    return loan ? [loan] : [];
+  });
+}
+
+/** Everything needed to repay an outstanding note loan and reclaim the note in a single PTB. */
+export interface RepayAndReclaimParams {
+  marketId: string;
+  dusdcType: string;
+  positionId: string;
+  /** dUSDC payment coins; the first is primary, the rest are merged into it before the exact-debt split. */
+  paymentCoinIds: string[];
+  debtAmount: number;
   recipient: string;
 }
 
@@ -126,7 +180,30 @@ export class CollateralClient {
     return tx;
   }
 
-  /** Repay-to-reclaim: settle the debt then take the escrowed note back. */
+  /** One PTB: repay the exact outstanding debt, then take the escrowed note back verbatim. */
+  buildRepayAndReclaimTx(p: RepayAndReclaimParams): Transaction {
+    const tx = new Transaction();
+    if (p.debtAmount > 0) {
+      const [primary, ...rest] = p.paymentCoinIds;
+      if (!primary) throw new Error('A dUSDC payment coin is required to repay outstanding debt');
+      if (rest.length > 0) tx.mergeCoins(tx.object(primary), rest.map((id) => tx.object(id)));
+      const [payment] = tx.splitCoins(tx.object(primary), [p.debtAmount]);
+      tx.moveCall({
+        target: `${this.pkg}::studio_collateral::repay_note`,
+        typeArguments: [p.dusdcType],
+        arguments: [tx.object(p.marketId), tx.object(p.positionId), payment],
+      });
+    }
+    const note = tx.moveCall({
+      target: `${this.pkg}::studio_collateral::close_note`,
+      typeArguments: [p.dusdcType],
+      arguments: [tx.object(p.positionId)],
+    });
+    tx.transferObjects([note], tx.pure.address(p.recipient));
+    return tx;
+  }
+
+  /** Reclaim a debt-free note: `close_note` aborts on-chain unless debt is zero. */
   buildCloseNoteTx(ids: CollateralMarketIds, dusdcType: string, positionId: string): Transaction {
     const tx = new Transaction();
     const note = tx.moveCall({

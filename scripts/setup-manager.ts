@@ -3,7 +3,10 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseVaultSetupResult } from '../lib/deploy-utils';
+import { applyScriptEnv } from '../lib/script-env';
 import { VaultClient } from '../lib/vault-client';
+
+applyScriptEnv();
 
 if (!existsSync('./scripts/config.json')) {
   throw new Error('Missing scripts/config.json. Run `pnpm verify:first -- --write-config`, then fill dusdcType/dusdcCoinId if you want setup to fund the manager.');

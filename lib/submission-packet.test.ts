@@ -34,13 +34,16 @@ sample settle:    3bafswkWphUEzUFkeCvfArhFe78ndcPgvgYoZyrLYCra payout=0 pnl=-524
 vault roll:       GDCEH8qro2ueVpEuzRXZjgFSywVd6P98x2GTJkyfA5M9
 vault position:   0x6d1f4514a140dd35d548aa49292486e58cd7fe6a66366b244054fe1a5273b299
 vault settle:     7cGNwsGmo2i7wnogcKtf4869a1HrHM6dPiMqH3qMRLqR payout=1000000 pnl=+472196
+k2 package:       0x3925e59c067dbf176f6d4134427c1bd1332f5fb15c85a6df86f3465763ae0f24
+k2 mint+borrow:   J1tUZaHP47HZFsw4XWz5e23Sg2KRyWyXmTSbLB2kptow
+k2 repay+reclaim: 3Zx1QbGhrmNgheiF1xvDGFAaepbMTaCrG1hz8Kd6fZri
 
 ## Demo Flow
 1. Type a BTC market view in English.
 
 ## Current Disclosures
 - Enoki gasless lane is implemented but live smoke needs credentials.
-- Secondary market is implemented with Cetus/mock fallback.
+- Secondary market requires a configured Cetus pool or funded DeepBook Spot path.
 - Predict is testnet-only today.
 - pnpm hackathon:status remains blocked until DEMO_VIDEO_URL and DEEPSURGE_SUBMISSION_URL are recorded.
 
@@ -50,6 +53,7 @@ pnpm address:inventory
 pnpm deepbook:spot-check -- --all-addresses --dry-run
 pnpm settle:sample
 pnpm settle:vault
+pnpm collateral:demo
 pnpm live:proof
 pnpm hackathon:status
 pnpm submission:check

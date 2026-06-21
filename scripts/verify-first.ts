@@ -1,7 +1,10 @@
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl, type SuiObjectData } from '@mysten/sui/jsonRpc';
 import { Transaction } from '@mysten/sui/transactions';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { applyScriptEnv } from '../lib/script-env';
+
+applyScriptEnv();
 
 const INDEXER_BASE = 'https://predict-server.testnet.mystenlabs.com';
 const CLOCK_ID = '0x6';
@@ -90,9 +93,13 @@ function configured(value: string | undefined): value is string {
   return Boolean(value && !value.startsWith('replace-') && value !== DEFAULT_SENDER);
 }
 
+function suiClientArgs(args: string[]): string[] {
+  return ['client', ...(process.env.SUI_CLIENT_CONFIG ? ['--client.config', process.env.SUI_CLIENT_CONFIG] : []), ...args];
+}
+
 function readCliActiveAddress(): string | undefined {
   try {
-    return execSync('sui client active-address', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('sui', suiClientArgs(['active-address']), { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return undefined;
   }
@@ -125,7 +132,7 @@ async function readFirstCoinObjectId(rpcUrl: string, owner: string, coinType: st
 
 async function main() {
   const writeConfig = process.argv.includes('--write-config');
-  const rpcUrl = process.env.SUI_RPC ?? getJsonRpcFullnodeUrl('testnet');
+  const rpcUrl = process.env.SUI_RPC ?? process.env.SUI_RPC_URL ?? getJsonRpcFullnodeUrl('testnet');
   const existing = readExistingConfig();
   const client = new SuiJsonRpcClient({
     url: rpcUrl,

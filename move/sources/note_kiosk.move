@@ -4,11 +4,20 @@ module predict_studio::note_kiosk {
         event,
         kiosk::{Self, Kiosk, KioskOwnerCap},
         object::{Self, UID},
-        package::Publisher,
+        package::{Self, Publisher},
         sui::SUI,
+        transfer,
         transfer_policy::{Self as policy, TransferPolicy, TransferPolicyCap, TransferRequest},
-        tx_context::TxContext,
+        tx_context::{Self, TxContext},
     };
+
+    /// One-time witness so the package can claim a `Publisher`, which is required to create a
+    /// `TransferPolicy<StudioNote>` (the missing piece that made the kiosk unusable before).
+    public struct NOTE_KIOSK has drop {}
+
+    fun init(otw: NOTE_KIOSK, ctx: &mut TxContext) {
+        transfer::public_transfer(package::claim(otw, ctx), tx_context::sender(ctx));
+    }
 
     const EFeeTooHigh: u64 = 1;
     const EInsufficientRoyalty: u64 = 2;
@@ -98,6 +107,15 @@ module predict_studio::note_kiosk {
         policy::new<StudioNote>(pub, ctx)
     }
 
+    /// Production setup: create the StudioNote transfer policy with the royalty rule, share
+    /// the policy so anyone can resolve a sale, and hand the policy cap to the publisher.
+    public fun create_and_share_policy(pub: &Publisher, bps: u16, royalty_recipient: address, ctx: &mut TxContext) {
+        let (mut transfer_policy, cap) = new_policy(pub, ctx);
+        set_royalty(&mut transfer_policy, &cap, bps, royalty_recipient);
+        transfer::public_share_object(transfer_policy);
+        transfer::public_transfer(cap, tx_context::sender(ctx));
+    }
+
     public fun pay_royalty(
         transfer_policy: &mut TransferPolicy<StudioNote>,
         request: &mut TransferRequest<StudioNote>,
@@ -131,6 +149,9 @@ module predict_studio::note_kiosk {
     ) {
         kiosk::lock<StudioNote>(kiosk, cap, transfer_policy, note)
     }
+
+    #[test_only]
+    public fun otw_for_testing(): NOTE_KIOSK { NOTE_KIOSK {} }
 
     #[test_only]
     public fun destroy_note_for_testing(note: StudioNote) {

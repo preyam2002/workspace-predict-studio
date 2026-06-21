@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PredictClient, decodeU64LE, structuredPositionFromObject } from './predict-client';
+import { PredictClient, decodeU64LE, getManagerOwner, structuredPositionFromObject } from './predict-client';
 import { structureHash } from './rfq';
 import type { OracleState } from './types';
 
@@ -55,6 +55,32 @@ describe('PredictClient', () => {
     expect(() => client.buildSettleTx(oracle, '0xposition')).not.toThrow();
   });
 
+  it('builds wallet manager create, deposit, and withdraw transactions for arbitrary buyers', () => {
+    const client = new PredictClient({} as never, '0x4', '0x5');
+    const createTx = client.buildCreateManagerTx();
+    const depositTx = client.buildDepositManagerTx(oracle, '0x6');
+    const withdrawTx = client.buildWithdrawManagerTx(oracle, 123_000, '0xabc');
+
+    expect(createTx.getData().commands.some((command) => command.MoveCall?.module === 'predict' && command.MoveCall.function === 'create_manager')).toBe(true);
+    expect(depositTx.getData().commands.some((command) => command.MoveCall?.module === 'predict_manager' && command.MoveCall.function === 'deposit')).toBe(true);
+    expect(withdrawTx.getData().commands.some((command) => command.MoveCall?.module === 'predict_manager' && command.MoveCall.function === 'withdraw')).toBe(true);
+    expect(withdrawTx.getData().commands.some((command) => command.TransferObjects)).toBe(true);
+  });
+
+  it('reads the wallet manager dUSDC balance through devInspect', async () => {
+    const client = new PredictClient(
+      {
+        devInspectTransactionBlock: async () => ({
+          results: [{ returnValues: [[[0xe8, 0x03, 0, 0, 0, 0, 0, 0], 'u64']] }],
+        }),
+      } as never,
+      '0x4',
+      '0x5',
+    );
+
+    await expect(client.getManagerBalance(oracle, '0xabc')).resolves.toBe(1_000);
+  });
+
   it('builds an RFQ fill transaction bound to the signed structure hash', () => {
     const client = new PredictClient({} as never, '0x4', '0xdbp');
     const legs = [{ isRange: false, isUp: true, lowerStrike: 70_000, higherStrike: 0, quantity: 1_000_000 }];
@@ -72,8 +98,10 @@ describe('PredictClient', () => {
       },
       new Uint8Array(32),
       new Uint8Array(64),
+      '0x00000000000000000000000000000000000000000000000000000000000000bb',
     );
     expect(tx.getData().commands.some((command) => command.MoveCall?.function === 'fill_quote')).toBe(true);
+    expect(tx.getData().commands.some((command) => command.TransferObjects)).toBe(true);
   });
 
   it('parses owned StructuredPosition object fields into a dashboard summary', async () => {
@@ -121,5 +149,25 @@ describe('PredictClient', () => {
       '0xdbp',
     );
     await expect(client.listPositions('0xabc')).resolves.toHaveLength(1);
+  });
+
+  it('reads the manager owner address from a PredictManager object', async () => {
+    await expect(
+      getManagerOwner(
+        {
+          getObject: async () => ({
+            data: {
+              content: {
+                dataType: 'moveObject',
+                fields: {
+                  owner: '0xmanagerowner',
+                },
+              },
+            },
+          }),
+        } as never,
+        '0xmanager',
+      ),
+    ).resolves.toBe('0xmanagerowner');
   });
 });

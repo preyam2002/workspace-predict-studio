@@ -39,7 +39,7 @@ export function syntheticSettlements(forward: number, sigmaAnnual: number, tauYe
   return out;
 }
 
-export function backtestWithFallback(
+export function backtestWithModelSimulation(
   legs: Leg[],
   premium: number,
   history: Settlement[],

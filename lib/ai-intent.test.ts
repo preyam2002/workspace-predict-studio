@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ANTHROPIC_MESSAGES_URL,
   DEFAULT_ANTHROPIC_MODEL,
+  createIntentFallback,
   createIntentFromAnthropic,
+  createIntentFromPrompt,
   intentToolInputSchema,
   validateIntentSpec,
   type FetchLike,
@@ -39,8 +41,23 @@ describe('ai intent DSL', () => {
 
     expect(result.spec.kind).toBe('catalog');
     expect(result.target.g.every((value) => value >= 0)).toBe(true);
+    expect(Math.max(...result.target.g)).toBe(100);
     expect(result.solution.legCount).toBeLessThanOrEqual(8);
     expect(result.solution.maxAbsError).toBeLessThanOrEqual(0.01);
+  });
+
+  it('scales catalog intents to explicit payoff dollars when provided', () => {
+    const result = validateIntentSpec(
+      {
+        kind: 'catalog',
+        catalogId: 'capped_bull_note',
+        payoffUsd: 250,
+        summary: 'BTC upside note with 250 dollar payout',
+      },
+      oracle,
+    );
+
+    expect(Math.max(...result.target.g)).toBe(250);
   });
 
   it('normalizes additive USD payoff regions and rejects negative regions', () => {
@@ -113,5 +130,30 @@ describe('ai intent DSL', () => {
     expect(String((calls[0] as { system?: string }).system)).toMatch(/8 legs/i);
     expect(result.echo).toContain('BTC range note');
     expect(result.solution.legCount).toBeLessThanOrEqual(8);
+  });
+
+  it('builds a deterministic fallback range when Anthropic is unavailable', () => {
+    const result = createIntentFallback({
+      prompt: 'BTC stays between 90 and 110 through expiry and max gain $250',
+      oracle,
+    });
+
+    expect(result.echo).toContain('between $90 and $110');
+    expect(Math.max(...result.target.g)).toBe(250);
+    expect(result.solution.legCount).toBeLessThanOrEqual(8);
+  });
+
+  it('falls back to deterministic parsing when the API key is missing', async () => {
+    const result = await createIntentFromPrompt({
+      prompt: 'BTC above 105, payout $200',
+      oracle,
+      apiKey: undefined,
+      fetcher: async () => {
+        throw new Error('should not call Anthropic without a key');
+      },
+    });
+
+    expect(result.echo).toContain('above $105');
+    expect(Math.max(...result.target.g)).toBe(200);
   });
 });

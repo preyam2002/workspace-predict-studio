@@ -4,7 +4,8 @@ import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, us
 import { toBase64 } from '@mysten/sui/utils';
 import { Send } from 'lucide-react';
 import { useState } from 'react';
-import { PredictClient } from '@/lib/predict-client';
+import { mintedPositionIdFromTransaction, mintDisabledReason } from '@/lib/mint-state';
+import { isLiveOracleState, PredictClient } from '@/lib/predict-client';
 import { USDC, type Leg, type OracleState } from '@/lib/types';
 
 export function MintButton({
@@ -13,6 +14,9 @@ export function MintButton({
   legs,
   shape,
   maxLossBudget,
+  netMaxGain,
+  accountAddress,
+  managerOwner,
   disabled,
   defaultGasless = false,
   onMinted,
@@ -22,22 +26,59 @@ export function MintButton({
   legs: Leg[];
   shape: string;
   maxLossBudget: number;
+  netMaxGain?: number;
+  accountAddress?: string;
+  managerOwner?: string;
   disabled?: boolean;
   defaultGasless?: boolean;
-  onMinted: (digest: string) => void;
+  onMinted: (digest: string, positionId?: string) => void;
 }) {
   const account = useCurrentAccount();
   const sui = useSuiClient();
   const { mutate, isPending } = useSignAndExecuteTransaction();
   const { mutateAsync: signTransaction, isPending: isSigning } = useSignTransaction();
-  const [gasless, setGasless] = useState(defaultGasless);
+  const gaslessAvailable = Boolean(process.env.NEXT_PUBLIC_ENOKI_API_KEY);
+  const [gasless, setGasless] = useState(defaultGasless && gaslessAvailable);
   const [isGaslessPending, setIsGaslessPending] = useState(false);
-  const pending = isPending || isSigning || isGaslessPending;
-  const cannotMint = disabled || pending || legs.length === 0 || !oracle.managerId || !oracle.dusdcType || !account;
+  const [isConfirmingMint, setIsConfirmingMint] = useState(false);
+  const [mintError, setMintError] = useState<string>();
+  const pending = isPending || isSigning || isGaslessPending || isConfirmingMint;
+  const disabledReason = mintDisabledReason({
+    explicitDisabled: disabled,
+    pending,
+    legsReady: legs.length > 0,
+    managerId: oracle.managerId,
+    dusdcType: oracle.dusdcType,
+    accountConnected: Boolean(account),
+    accountAddress,
+    managerOwner,
+    oracleLive: isLiveOracleState(oracle),
+    netMaxGain,
+  });
+  const cannotMint = Boolean(disabledReason);
+
+  async function finishMint(digest: string) {
+    onMinted(digest);
+    setIsConfirmingMint(true);
+    try {
+      const transaction = await sui.waitForTransaction({
+        digest,
+        options: { showEvents: true, showObjectChanges: true },
+        timeout: 30_000,
+        pollInterval: 1_000,
+      });
+      onMinted(digest, mintedPositionIdFromTransaction(transaction));
+    } catch {
+      onMinted(digest);
+    } finally {
+      setIsConfirmingMint(false);
+    }
+  }
 
   async function mintGasless() {
     if (!account) return;
     setIsGaslessPending(true);
+    setMintError(undefined);
     try {
       const tx = client.buildMintTx(oracle, legs, shape, maxLossBudget);
       const transactionKindBytes = toBase64(await tx.build({ client: sui, onlyTransactionKind: true }));
@@ -51,7 +92,15 @@ export function MintButton({
         digest: sponsored.digest,
         signature,
       });
-      onMinted(executed.digest);
+      await finishMint(executed.digest);
+    } catch (error) {
+      setMintError(
+        error instanceof Error && error.message.includes('/api/sponsor')
+          ? 'Gasless sponsor unavailable (Enoki keys not set). Turn off Gasless to mint with your wallet.'
+          : error instanceof Error
+            ? error.message
+            : 'Gasless mint failed.',
+      );
     } finally {
       setIsGaslessPending(false);
     }
@@ -59,29 +108,43 @@ export function MintButton({
 
   return (
     <div className="grid gap-2">
-      <label className="surface flex items-center justify-between gap-3 px-3 py-2 text-xs">
-        <span>Gasless</span>
-        <input type="checkbox" checked={gasless} onChange={(event) => setGasless(event.target.checked)} />
+      <label
+        className="surface flex items-center justify-between gap-3 px-3 py-2 text-xs"
+        title={gaslessAvailable ? 'Sponsor gas via Enoki zkLogin' : 'Set Enoki keys (NEXT_PUBLIC_ENOKI_API_KEY) to enable gasless minting'}
+      >
+        <span className={gaslessAvailable ? '' : 'muted-text'}>Gasless{gaslessAvailable ? '' : ' · unavailable'}</span>
+        <input type="checkbox" checked={gasless} disabled={!gaslessAvailable} onChange={(event) => setGasless(event.target.checked)} />
       </label>
       <button
         className="icon-button primary-button w-full"
         disabled={cannotMint}
         type="button"
-        title={!oracle.managerId || !oracle.dusdcType ? 'Set NEXT_PUBLIC_MANAGER_ID and NEXT_PUBLIC_DUSDC_TYPE after setup' : 'Mint structure'}
+        title={disabledReason ?? 'Mint structure'}
         onClick={() => {
+          setMintError(undefined);
           if (gasless) {
             void mintGasless();
             return;
           }
           mutate(
             { transaction: client.buildMintTx(oracle, legs, shape, maxLossBudget) },
-            { onSuccess: (result) => onMinted(result.digest) },
+            {
+              onSuccess: (result) => void finishMint(result.digest),
+              onError: (error) => setMintError(error instanceof Error ? error.message : 'Mint failed.'),
+            },
           );
         }}
       >
         <Send size={16} />
-        {pending ? 'Minting' : `Mint Max Loss $${(maxLossBudget / USDC).toFixed(2)}`}
+        {isConfirmingMint
+          ? 'Confirming position'
+          : pending
+            ? 'Minting'
+            : disabledReason
+              ? disabledReason
+              : `Mint Max Loss $${(maxLossBudget / USDC).toFixed(2)}`}
       </button>
+      {mintError ? <div className="text-xs danger-text">{mintError}</div> : null}
     </div>
   );
 }

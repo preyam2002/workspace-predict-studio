@@ -3,9 +3,11 @@
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
 import { BadgeDollarSign, RefreshCcw } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { markLegs } from '@/lib/nav';
 import { PredictClient, type StructuredPositionSummary } from '@/lib/predict-client';
 import { USDC, type OracleState } from '@/lib/types';
+import { ExplorerLink } from './ExplorerLink';
 
 function money(value: number): string {
   return `$${(value / USDC).toFixed(2)}`;
@@ -14,10 +16,22 @@ function money(value: number): string {
 function pnlClass(value: number): string {
   if (value > 0) return 'good-text';
   if (value < 0) return 'danger-text';
-  return 'text-[#8c96a8]';
+  return 'muted-text';
 }
 
-export function PositionsDashboard({ client, oracle }: { client: PredictClient; oracle?: OracleState }) {
+export function PositionsDashboard({
+  client,
+  oracle,
+  refreshKey = 0,
+  lastMintDigest,
+  lastMintPositionId,
+}: {
+  client: PredictClient;
+  oracle?: OracleState;
+  refreshKey?: number;
+  lastMintDigest?: string;
+  lastMintPositionId?: string;
+}) {
   const account = useCurrentAccount();
   const { mutate, isPending } = useSignAndExecuteTransaction();
   const positions = useQuery({
@@ -25,6 +39,19 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
     queryFn: () => client.listPositions(account!.address),
     enabled: Boolean(account),
   });
+  const visiblePositions = useMemo(() => {
+    return [...(positions.data ?? [])].sort((a, b) => {
+      if (a.objectId === lastMintPositionId) return -1;
+      if (b.objectId === lastMintPositionId) return 1;
+      return b.expiryMs - a.expiryMs;
+    });
+  }, [lastMintPositionId, positions.data]);
+  const lastMintListed = Boolean(lastMintPositionId && positions.data?.some((position) => position.objectId === lastMintPositionId));
+
+  useEffect(() => {
+    if (!account || refreshKey === 0) return;
+    void positions.refetch();
+  }, [account, positions.refetch, refreshKey]);
 
   return (
     <section className="panel p-4">
@@ -37,10 +64,21 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
           <RefreshCcw size={16} />
         </button>
       </div>
-      {!account ? <div className="mt-3 text-sm text-[#8c96a8]">Connect a wallet to list owned positions.</div> : null}
-      {positions.data?.length ? (
+      {!account ? <div className="mt-3 text-sm muted-text">Connect a wallet to list owned positions.</div> : null}
+      {account && lastMintDigest ? (
+        <div className="surface mt-3 break-all px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="metric-label">Last signed mint</span>
+            <span className={lastMintListed ? 'good-text' : 'muted-text'}>{lastMintListed ? 'Listed below' : 'Indexing receipt'}</span>
+          </div>
+          <div className="mt-1 muted-text">
+            {lastMintPositionId ? <ExplorerLink value={lastMintPositionId} kind="object" /> : <ExplorerLink value={lastMintDigest} />}
+          </div>
+        </div>
+      ) : null}
+      {visiblePositions.length ? (
         <div className="mt-4 grid gap-2">
-          {positions.data.map((position: StructuredPositionSummary) => {
+          {visiblePositions.map((position: StructuredPositionSummary) => {
             const markOracle = oracle?.oracleId === position.oracleId ? oracle : undefined;
             const settleOracle =
               oracle && position.oracleId
@@ -53,30 +91,37 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
                 : undefined;
             const mark = markOracle && !position.settled ? markLegs(position.legs, markOracle.svi, markOracle.forward) : 0;
             const pnl = mark - position.premiumPaid;
+            const isLastMint = position.objectId === lastMintPositionId;
             return (
               <div className="surface flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm" key={position.objectId}>
                 <div className="flex items-center gap-2">
                   <BadgeDollarSign size={16} className="good-text" />
                   <div>
-                    <div className="metric-value">{position.shape || 'structured_position'}</div>
-                    <div className="max-w-[260px] truncate text-xs text-[#8c96a8]">{position.objectId}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="metric-value">{position.shape || 'structured_position'}</span>
+                      {isLastMint ? <span className="metric-label good-text">Last mint</span> : null}
+                    </div>
+                    <div className="max-w-[260px] truncate text-xs muted-text">
+                      <ExplorerLink value={position.objectId} kind="object" />
+                    </div>
                   </div>
                 </div>
                 <div className="grid min-w-[220px] grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <span className="text-[#8c96a8]">Premium</span>
+                  <span className="muted-text">Premium</span>
                   <span className="text-right">{money(position.premiumPaid)}</span>
-                  <span className="text-[#8c96a8]">Mark</span>
+                  <span className="muted-text">Mark</span>
                   <span className="text-right">{position.settled || !markOracle ? '-' : money(mark)}</span>
-                  <span className="text-[#8c96a8]">P&L</span>
-                  <span className={`text-right ${position.settled || !markOracle ? 'text-[#8c96a8]' : pnlClass(pnl)}`}>
+                  <span className="muted-text">P&L</span>
+                  <span className={`text-right ${position.settled || !markOracle ? 'muted-text' : pnlClass(pnl)}`}>
                     {position.settled || !markOracle ? '-' : money(pnl)}
                   </span>
-                  <span className="text-[#8c96a8]">Expiry</span>
+                  <span className="muted-text">Expiry</span>
                   <span className="text-right">{new Date(position.expiryMs).toLocaleString()}</span>
                 </div>
                 <button
                   className="icon-button"
                   disabled={!settleOracle?.managerId || !settleOracle.dusdcType || isPending || position.settled}
+                  title={position.settled ? 'Already settled' : 'Settle this receipt; payout returns to the trading account balance.'}
                   type="button"
                   onClick={() => {
                     if (!settleOracle?.managerId || !settleOracle.dusdcType) return;
@@ -90,7 +135,7 @@ export function PositionsDashboard({ client, oracle }: { client: PredictClient; 
           })}
         </div>
       ) : account && !positions.isLoading ? (
-        <div className="mt-3 text-sm text-[#8c96a8]">No structured positions found for this package.</div>
+        <div className="mt-3 text-sm muted-text">No structured positions found for this package.</div>
       ) : null}
     </section>
   );

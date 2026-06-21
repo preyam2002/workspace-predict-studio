@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3 } from 'lucide-react';
-import { backtestWithFallback } from '@/lib/backtest';
+import { backtestWithModelSimulation } from '@/lib/backtest';
 import { getSettledHistory } from '@/lib/indexer';
 import { USDC, type Leg, type OracleState } from '@/lib/types';
 
@@ -11,7 +11,7 @@ export function Backtester({ legs, premium, oracle }: { legs: Leg[]; premium: nu
     queryKey: ['settled-history'],
     queryFn: () => getSettledHistory('BTC'),
   });
-  const result = oracle ? backtestWithFallback(legs, premium, (history.data ?? []).slice(0, 60), oracle) : undefined;
+  const result = oracle ? backtestWithModelSimulation(legs, premium, (history.data ?? []).slice(0, 60), oracle) : undefined;
   const bars = result?.pnls.slice(0, 24) ?? [];
   const maxAbs = Math.max(1, ...bars.map((value) => Math.abs(value)));
 
@@ -32,13 +32,13 @@ export function Backtester({ legs, premium, oracle }: { legs: Leg[]; premium: nu
             <Metric label="Avg P&L" value={`$${(result.avgPnl / USDC).toFixed(2)}`} />
           </div>
           <div className="metric-label mt-3">
-            {result.source === 'history' ? 'Settled oracle history' : 'SVI synthetic fallback'}
+            {result.source === 'history' ? 'Settled oracle history' : 'SVI model simulation'}
           </div>
           <div className="mt-4 flex h-24 items-end gap-1">
             {bars.map((value, index) => (
               <div
                 key={`${value}-${index}`}
-                className={value >= 0 ? 'bg-[#3ddc97]' : 'bg-[#ff6b6b]'}
+                className={value >= 0 ? 'bg-[var(--green)]' : 'bg-[var(--red)]'}
                 style={{ height: `${Math.max(4, (Math.abs(value) / maxAbs) * 92)}px`, width: `${100 / Math.max(1, bars.length)}%` }}
                 title={`$${(value / USDC).toFixed(2)}`}
               />
@@ -46,7 +46,7 @@ export function Backtester({ legs, premium, oracle }: { legs: Leg[]; premium: nu
           </div>
         </>
       ) : (
-        <div className="mt-3 text-sm text-[#8c96a8]">{history.isLoading ? 'Loading settled oracles.' : 'No replay data available.'}</div>
+        <div className="mt-3 text-sm muted-text">{history.isLoading ? 'Loading settled oracles.' : 'No replay data available.'}</div>
       )}
     </section>
   );

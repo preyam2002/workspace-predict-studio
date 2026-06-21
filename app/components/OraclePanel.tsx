@@ -1,6 +1,8 @@
 'use client';
 
 import { Activity, Clock3, RefreshCcw } from 'lucide-react';
+import type { IndexerOracle } from '@/lib/indexer';
+import { isLiveOracleState } from '@/lib/predict-client';
 import type { PythNavAnchor } from '@/lib/pyth';
 import type { OracleState } from '@/lib/types';
 
@@ -19,6 +21,16 @@ function expiryText(expiryMs: number) {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+function expiryOptionText(oracle: IndexerOracle) {
+  const expiry = Number(oracle.expiry);
+  return `${expiryText(expiry)} · ${new Date(expiry).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
 export function OraclePanel({
   oracle,
   loading,
@@ -26,6 +38,9 @@ export function OraclePanel({
   pythAnchor,
   pythLoading,
   pythError,
+  oracleOptions = [],
+  selectedOracleId,
+  onOracleChange,
   onRefresh,
 }: {
   oracle?: OracleState;
@@ -34,6 +49,9 @@ export function OraclePanel({
   pythAnchor?: PythNavAnchor;
   pythLoading?: boolean;
   pythError?: string;
+  oracleOptions?: IndexerOracle[];
+  selectedOracleId?: string;
+  onOracleChange?: (oracleId: string) => void;
   onRefresh: () => void;
 }) {
   return (
@@ -41,21 +59,44 @@ export function OraclePanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="metric-label">Live Oracle</div>
-          <div className="mt-1 flex items-center gap-2 text-lg font-semibold">
-            <Activity size={18} className="blue-text" />
+          <div className="metric-value mt-1 flex items-center gap-2 text-lg font-semibold">
+            <Activity size={18} className="volt-text" />
             {oracle ? `${oracle.underlyingAsset} ${oracle.status}` : loading ? 'Loading Predict oracle' : 'Oracle unavailable'}
           </div>
         </div>
-        <button className="icon-button" onClick={onRefresh} type="button" title="Refresh oracle">
-          <RefreshCcw size={16} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {oracleOptions.length > 0 ? (
+            <label className="surface grid gap-1 px-3 py-2 text-xs">
+              <span className="metric-label">Expiry</span>
+              <select
+                className="bg-transparent outline-none metric-value"
+                value={selectedOracleId ?? ''}
+                onChange={(event) => onOracleChange?.(event.target.value)}
+              >
+                {oracleOptions.map((option) => (
+                  <option key={option.oracle_id} value={option.oracle_id}>
+                    {expiryOptionText(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button className="icon-button" onClick={onRefresh} type="button" title="Refresh oracle">
+            <RefreshCcw size={16} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error ? <div className="danger-text mt-3 text-sm">{error}</div> : null}
       {pythError ? <div className="danger-text mt-3 text-sm">{pythError}</div> : null}
+      {oracle && !isLiveOracleState(oracle) ? (
+        <div className="surface warn-text mt-3 px-3 py-2 text-sm">
+          This Predict oracle has expired. Choose another live expiry from the dropdown or refresh the oracle list before minting.
+        </div>
+      ) : null}
       {oracle ? (
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-8">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Metric label="Spot" value={dollars(oracle.spot)} />
           <Metric label="Forward" value={dollars(oracle.forward)} />
           <Metric
@@ -77,7 +118,7 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
   return (
     <div className="surface px-3 py-2">
       <div className="metric-label">{label}</div>
-      <div className="metric-value mt-1 flex items-center gap-1 text-sm">
+      <div className="metric-value mt-1 flex items-center gap-1 whitespace-nowrap text-sm">
         {icon}
         {value}
       </div>

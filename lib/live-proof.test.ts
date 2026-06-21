@@ -40,4 +40,20 @@ describe('live proof summary', () => {
     expect(proof).toContain('sample settle:    sample-settle-digest payout=1000000 pnl=+475799');
     expect(proof).toContain('vault settle:     vault-settle-digest payout=0 pnl=-527804');
   });
+
+  it('formats recorded K2 note-backed lending proof', () => {
+    const proof = formatLiveProof({
+      k2_note_lending: {
+        collateralPackageId: '0xk2package',
+        noteCollateralMarketId: '0xmarket',
+        mintBorrowDigest: 'mint-borrow-digest',
+        repayReclaimDigest: 'repay-reclaim-digest',
+      },
+    });
+
+    expect(proof).toContain('k2 package:       0xk2package');
+    expect(proof).toContain('k2 note market:   0xmarket');
+    expect(proof).toContain('k2 mint+borrow:   mint-borrow-digest');
+    expect(proof).toContain('k2 repay+reclaim: repay-reclaim-digest');
+  });
 });

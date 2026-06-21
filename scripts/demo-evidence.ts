@@ -1,6 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { formatDemoEvidenceBundle, type DemoEvidenceCommand } from '../lib/demo-evidence';
+import { applyScriptEnv } from '../lib/script-env';
+
+const env = applyScriptEnv();
 
 interface EvidenceCommand {
   label: string;
@@ -14,6 +17,7 @@ const commands: EvidenceCommand[] = [
   { label: 'DeepBook Spot check', args: ['deepbook:spot-check', '--', '--all-addresses', '--dry-run'] },
   { label: 'Sample settlement', args: ['settle:sample'] },
   { label: 'Vault settlement', args: ['settle:vault'] },
+  { label: 'K2 collateral demo', args: ['collateral:demo'] },
   { label: 'Submission packet check', args: ['submission:check'] },
   { label: 'Hackathon readiness', args: ['hackathon:status'] },
 ];
@@ -21,7 +25,7 @@ const commands: EvidenceCommand[] = [
 function runCommand(command: EvidenceCommand): DemoEvidenceCommand {
   const printable = `pnpm ${command.args.join(' ')}`;
   try {
-    const output = execFileSync('pnpm', command.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const output = execFileSync('pnpm', command.args, { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
     return { label: command.label, command: printable, exitCode: 0, output };
   } catch (err) {
     const error = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string; message?: string };

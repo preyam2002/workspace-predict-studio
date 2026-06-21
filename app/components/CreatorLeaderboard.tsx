@@ -34,7 +34,7 @@ export function CreatorLeaderboard({ ranks }: { ranks: PublisherRank[] }) {
             <div className="metric-value text-right">{usd(rank.volume)}</div>
           </div>
         ))}
-        {ranks.length === 0 ? <div className="surface px-3 py-2 text-sm text-[#8c96a8]">No publisher fills indexed.</div> : null}
+        {ranks.length === 0 ? <div className="surface px-3 py-2 text-sm muted-text">No publisher fills indexed.</div> : null}
       </div>
     </section>
   );

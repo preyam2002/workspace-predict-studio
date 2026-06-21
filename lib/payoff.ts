@@ -148,12 +148,14 @@ export function ev(legs: Leg[], svi: SVI, forward: number, premium: number): num
 }
 
 export function payoffCurve(legs: Leg[], premium: number, lo: number, hi: number, n = 200) {
-  const pts: { s: number; pnl: number }[] = [];
+  const samples = new Set<number>();
   for (let i = 0; i <= n; i += 1) {
-    const s = lo + (hi - lo) * (i / n);
-    pts.push({ s, pnl: pnlAt(legs, premium, s) });
+    samples.add(lo + (hi - lo) * (i / n));
   }
-  return pts;
+  for (const settlement of representativeSettlements(legs)) {
+    if (settlement >= lo && settlement <= hi) samples.add(settlement);
+  }
+  return [...samples].sort((a, b) => a - b).map((s) => ({ s, pnl: pnlAt(legs, premium, s) }));
 }
 
 export function greeksUp(svi: SVI, forward: number, strike: number, tauYears: number) {

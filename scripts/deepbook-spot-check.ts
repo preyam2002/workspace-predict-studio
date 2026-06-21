@@ -16,13 +16,16 @@ import {
   type AddressDeepBalanceSummary,
   type BalanceSummaryInput,
 } from '../lib/deepbook-spot-check';
+import { applyScriptEnv } from '../lib/script-env';
+
+applyScriptEnv();
 
 interface RpcResponse<T> {
   result?: T;
   error?: { message?: string };
 }
 
-const RPC_URL = process.env.SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
+const RPC_URL = process.env.SUI_RPC_URL ?? process.env.SUI_RPC ?? 'https://fullnode.testnet.sui.io:443';
 const allAddresses = process.argv.includes('--all-addresses');
 const dryRun = process.argv.includes('--dry-run');
 
@@ -48,13 +51,17 @@ type DevInspectReturnValue = [number[], string];
 function activeAddress(): string {
   const envAddress = process.env.SUI_ADDRESS;
   if (envAddress) return envAddress;
-  return execFileSync('sui', ['client', 'active-address'], { encoding: 'utf8' }).trim();
+  return execFileSync('sui', suiClientArgs(['active-address']), { encoding: 'utf8' }).trim();
+}
+
+function suiClientArgs(args: string[]): string[] {
+  return ['client', ...(process.env.SUI_CLIENT_CONFIG ? ['--client.config', process.env.SUI_CLIENT_CONFIG] : []), ...args];
 }
 
 function localAddresses(): string[] {
   const envAddress = process.env.SUI_ADDRESS;
   if (envAddress || !allAddresses) return [activeAddress()];
-  const body = JSON.parse(execFileSync('sui', ['client', 'addresses', '--json'], { encoding: 'utf8' })) as {
+  const body = JSON.parse(execFileSync('sui', suiClientArgs(['addresses', '--json']), { encoding: 'utf8' })) as {
     activeAddress?: string;
     addresses?: Array<[string, string]>;
   };
