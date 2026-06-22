@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14171d"/>
+      <stop offset="1" stop-color="#0a0b0d"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <!-- zero P&L axis -->
+  <line x1="98" y1="300" x2="414" y2="300" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3" stroke-dasharray="3 11" stroke-linecap="round"/>
+  <!-- defined-risk payoff: capped max-loss floor, then linear upside -->
+  <path d="M104 362 H250 L408 148" fill="none" stroke="#bce152" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- strike kink marker -->
+  <circle cx="250" cy="362" r="11" fill="#0a0b0d"/>
+  <circle cx="250" cy="362" r="11" fill="none" stroke="#bce152" stroke-width="6"/>
+</svg>
