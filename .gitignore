@@ -10,3 +10,4 @@ move/build/
 .sui/
 deploy.json
 scripts/config.json
+.vercel
